@@ -1,0 +1,2322 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Werkstatt KanBan</title>
+  <style>
+    /* === DESIGN TOKENS === */
+    :root {
+      color-scheme: light;
+      --page-bg: #f4f1ea;
+      --surface: #ffffff;
+      --surface-muted: #f7f4ee;
+      --surface-raised: #faf8f4;
+      --surface-strong: #e9e2d6;
+      --text-strong: #1e293b;
+      --text-soft: #475569;
+      --text-muted: #94a3b8;
+      --border-soft: #e2ddd6;
+      --border-strong: #1e293b;
+      --accent: #2563eb;
+      --accent-contrast: #ffffff;
+      --accent-muted: #dbeafe;
+      --warn-surface: #fffbeb;
+      --warn-border: #f59e0b;
+      --warn-text: #92400e;
+      --error-surface: #fef2f2;
+      --error-border: #ef4444;
+      --error-text: #991b1b;
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --page-bg: #0f1115;
+      --surface: #161a21;
+      --surface-muted: #1c222c;
+      --surface-raised: #202733;
+      --surface-strong: #2b3442;
+      --text-strong: #f1f5f9;
+      --text-soft: #cbd5e1;
+      --text-muted: #64748b;
+      --border-soft: #334155;
+      --border-strong: #e2e8f0;
+      --accent: #3b82f6;
+      --accent-contrast: #ffffff;
+      --accent-muted: #1e3a5f;
+      --warn-surface: #2f1c05;
+      --warn-border: #d97706;
+      --warn-text: #fde68a;
+      --error-surface: #3a1111;
+      --error-border: #dc2626;
+      --error-text: #fecaca;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--page-bg);
+      color: var(--text-strong);
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      transition: background-color 160ms ease, color 160ms ease;
+    }
+    a { color: inherit; text-decoration: none; }
+    button { font-family: inherit; font-size: inherit; cursor: pointer; }
+    input { font-family: inherit; font-size: inherit; }
+
+    /* === LAYOUT === */
+    .page { min-height: 100vh; padding: 24px 32px; }
+    .page-inner { display: flex; flex-direction: column; gap: 16px; }
+
+    /* === CARDS / PANELS === */
+    .panel {
+      border-radius: 24px;
+      border: 1px solid var(--border-soft);
+      background: var(--surface);
+      padding: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .panel-sm {
+      border-radius: 16px;
+      border: 1px solid var(--border-soft);
+      background: var(--surface);
+      padding: 20px;
+      box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    }
+
+    /* === BUTTONS === */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      border-radius: 12px; border: 1px solid transparent;
+      padding: 6px 16px; font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: opacity 120ms, background 120ms;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: var(--accent-contrast); }
+    .btn-primary:hover:not(:disabled) { opacity: .9; }
+    .btn-outline {
+      background: transparent; border-color: var(--border-soft);
+      color: var(--text-soft);
+    }
+    .btn-outline:hover:not(:disabled) { color: var(--text-strong); }
+    .btn-danger { background: transparent; border-color: var(--border-soft); color: var(--text-muted); }
+    .btn-danger:hover:not(:disabled) { border-color: #fca5a5; color: #dc2626; }
+    .btn-xs { padding: 4px 10px; font-size: 11px; border-radius: 8px; }
+    .btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 10px; }
+
+    /* === INPUTS === */
+    .input {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--border-soft);
+      background: var(--surface-raised);
+      padding: 8px 12px;
+      color: var(--text-strong);
+      outline: none;
+      transition: border-color 120ms, box-shadow 120ms;
+    }
+    .input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-muted); }
+    .input::placeholder { color: var(--text-muted); }
+
+    /* === BADGES === */
+    .badge {
+      display: inline-flex; align-items: center;
+      border-radius: 999px; border: 1px solid var(--border-soft);
+      background: var(--surface-raised); color: var(--text-muted);
+      padding: 2px 10px; font-size: 11px;
+    }
+    .badge-warn {
+      border-color: var(--warn-border);
+      background: var(--warn-surface);
+      color: var(--warn-text);
+    }
+    .badge-accent {
+      border-color: var(--accent);
+      background: var(--accent-muted);
+      color: var(--accent);
+    }
+
+    /* === SCREEN HEADER === */
+    .screen-header {
+      display: grid;
+      gap: 24px;
+      grid-template-columns: 1.7fr 1fr;
+    }
+    @media (max-width: 1100px) { .screen-header { grid-template-columns: 1fr; } }
+
+    .header-eyebrow {
+      font-size: 11px; font-weight: 500;
+      text-transform: uppercase; letter-spacing: .18em;
+      color: var(--text-muted);
+    }
+    .header-title { margin-top: 12px; font-size: 28px; font-weight: 600; color: var(--text-strong); }
+    .header-sub { margin-top: 16px; max-width: 600px; font-size: 13px; line-height: 1.6; color: var(--text-soft); }
+    .header-actions { display: flex; align-items: center; gap: 12px; }
+
+    /* === BOARD SELECTOR === */
+    .board-selector {
+      border-radius: 16px;
+      border: 1px solid var(--border-soft);
+      background: var(--surface);
+      padding: 16px;
+      box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    }
+    .board-selector-inner { display: flex; flex-wrap: wrap; gap: 8px; }
+    .board-btn {
+      display: flex; align-items: center; gap: 8px;
+      border-radius: 12px; border: 1px solid var(--border-soft);
+      background: var(--surface-raised); color: var(--text-soft);
+      padding: 8px 12px; font-size: 13px; cursor: pointer;
+      transition: all 120ms;
+    }
+    .board-btn:hover { border-color: var(--accent); color: var(--text-strong); }
+    .board-btn.active {
+      border-color: var(--accent); background: var(--accent);
+      color: white; font-weight: 600;
+    }
+    .board-btn-count {
+      border-radius: 999px; padding: 1px 6px; font-size: 11px; font-weight: 700;
+      background: rgba(0,0,0,.12); color: inherit;
+    }
+    .board-btn.active .board-btn-count { background: rgba(255,255,255,.22); color: white; }
+
+    /* === FILTER BAR === */
+    .filter-bar {
+      border-radius: 16px;
+      border: 1px solid var(--border-soft);
+      background: var(--surface);
+      padding: 16px;
+      box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    }
+    .filter-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+    }
+    @media (max-width: 1200px) { .filter-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 800px) { .filter-grid { grid-template-columns: repeat(2, 1fr); } }
+    .filter-label {
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .filter-label-text {
+      font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .08em;
+      color: var(--text-muted);
+    }
+    .filter-actions { margin-top: 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+
+    /* === BOARD METRICS === */
+    .metrics { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .metrics-divider { width: 1px; height: 16px; background: var(--border-soft); }
+
+    /* === BOARD AREA === */
+    .board-area { display: block; }
+    .board-area.with-detail {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 380px;
+      gap: 24px;
+    }
+    @media (max-width: 1300px) { .board-area.with-detail { grid-template-columns: 1fr; } }
+    .board-scroll { overflow-x: auto; padding-bottom: 8px; }
+    .board-columns { display: flex; gap: 16px; }
+
+    /* === COLUMN === */
+    .column {
+      width: 300px; min-width: 300px;
+      border-radius: 16px;
+      border: 1px solid var(--border-soft);
+      background: var(--surface);
+      box-shadow: 0 1px 2px rgba(0,0,0,.04);
+      display: flex; flex-direction: column;
+      max-height: 240vh; min-height: 600px;
+      transition: border-color 120ms, background 120ms;
+    }
+    .column.drag-over {
+      border-color: var(--border-strong);
+      background: var(--surface-raised);
+    }
+    .column-header {
+      flex-shrink: 0;
+      border-radius: 16px 16px 0 0;
+      border-bottom: 1px solid var(--border-soft);
+      background: var(--surface-raised);
+      padding: 12px 16px;
+    }
+    .column-name { font-size: 13px; font-weight: 600; color: var(--text-strong); }
+    .column-count { margin-top: 2px; font-size: 11px; color: var(--text-muted); }
+    .column-header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .column-body { flex: 1; overflow-y: auto; padding: 12px; }
+    .column-cards { display: flex; flex-direction: column; gap: 12px; }
+    .column-empty {
+      border-radius: 12px;
+      border: 1px dashed var(--border-soft);
+      padding: 24px 16px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* === KANBAN CARD === */
+    .kcard {
+      display: block;
+      border-radius: 16px;
+      border: 1px solid var(--border-soft);
+      background: var(--surface);
+      overflow: hidden;
+      cursor: pointer;
+      transition: box-shadow 120ms, border-color 120ms;
+      user-select: none;
+    }
+    .kcard:hover { box-shadow: 0 4px 12px rgba(0,0,0,.10); }
+    .kcard.selected { border-color: var(--accent); box-shadow: 0 4px 12px rgba(37,99,235,.18); }
+    .kcard.overdue { border-color: var(--warn-border); }
+    .kcard[draggable="true"] { cursor: grab; }
+    .kcard[draggable="true"]:active { cursor: grabbing; }
+    .kcard.dragging { opacity: .45; }
+    .kcard-header { padding: 10px 16px; background: var(--surface-raised); }
+    .kcard.selected .kcard-header { background: var(--accent-muted); }
+    .kcard.overdue .kcard-header { background: var(--warn-surface); }
+    .kcard-meldung { font-size: 15px; font-weight: 700; color: var(--text-strong); }
+    .kcard.overdue .kcard-meldung { color: var(--warn-text); }
+    .kcard-body { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; padding: 12px 16px; font-size: 12px; }
+    .kcard-label { color: var(--text-muted); }
+    .kcard-value { font-weight: 500; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .kcard-warn { border-top: 1px solid var(--warn-border); background: var(--warn-surface); padding: 8px 16px; font-size: 11px; font-weight: 500; color: var(--warn-text); }
+
+    /* === DETAIL PANEL === */
+    .detail-panel {
+      border-radius: 24px;
+      border: 1px solid var(--border-soft);
+      background: var(--surface);
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+      overflow-y: auto;
+      max-height: 90vh;
+      position: sticky;
+      top: 24px;
+    }
+    .detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+    .detail-meldung { margin-top: 8px; font-size: 24px; font-weight: 600; color: var(--text-strong); }
+    .detail-location { margin-top: 8px; font-size: 12px; color: var(--text-soft); }
+    .detail-grid { margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .detail-infocard {
+      border-radius: 16px;
+      border: 1px solid var(--border-soft);
+      background: var(--surface-muted);
+      padding: 12px 16px;
+    }
+    .detail-infocard.overdue { border-color: var(--warn-border); background: var(--warn-surface); }
+    .detail-infocard-label { font-size: 12px; color: var(--text-muted); }
+    .detail-infocard.overdue .detail-infocard-label { color: var(--warn-text); font-weight: 600; }
+    .detail-infocard-value { margin-top: 4px; font-size: 12px; font-weight: 500; color: var(--text-strong); }
+    .detail-infocard.overdue .detail-infocard-value { color: var(--warn-text); }
+    .detail-warn {
+      margin-top: 20px;
+      border-radius: 16px;
+      border: 1px solid var(--warn-border);
+      background: var(--warn-surface);
+      padding: 12px 16px;
+      font-size: 12px;
+      color: var(--warn-text);
+    }
+    .detail-section { margin-top: 24px; }
+    .detail-section-title { font-size: 16px; font-weight: 600; color: var(--text-strong); }
+    .detail-section-sub { margin-top: 8px; font-size: 12px; color: var(--text-soft); }
+    .detail-items { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .detail-item {
+      border-radius: 16px;
+      border: 1px solid var(--border-soft);
+      background: var(--surface-muted);
+      padding: 16px;
+    }
+    .detail-item-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+    .detail-item-title { font-size: 13px; font-weight: 600; color: var(--text-strong); }
+    .detail-item-sub { margin-top: 4px; font-size: 12px; color: var(--text-soft); }
+    .detail-item-time {
+      border-radius: 999px;
+      background: var(--surface);
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-soft);
+    }
+    .detail-dl { margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 12px; }
+    .detail-dt { color: var(--text-muted); }
+    .detail-dd { margin-top: 4px; font-weight: 500; color: var(--text-strong); }
+    .detail-issue-box {
+      margin-top: 16px;
+      border-radius: 12px;
+      border: 1px solid var(--warn-border);
+      background: var(--surface);
+      padding: 12px;
+      font-size: 12px;
+      color: var(--warn-text);
+    }
+
+    /* === IMPORT FORM === */
+    .import-form { display: flex; flex-direction: column; gap: 12px; }
+    .import-form input[type="file"] {
+      display: block;
+      border-radius: 12px;
+      border: 1px solid var(--border-soft);
+      background: var(--surface-raised);
+      padding: 8px 12px;
+      font-size: 13px;
+      color: var(--text-soft);
+      width: 100%;
+    }
+    .import-result-ok {
+      border-radius: 12px;
+      border: 1px solid var(--accent);
+      background: var(--accent-muted);
+      padding: 12px 16px;
+      font-size: 12px;
+      color: var(--accent);
+    }
+    .import-result-err {
+      border-radius: 12px;
+      border: 1px solid var(--warn-border);
+      background: var(--warn-surface);
+      padding: 12px 16px;
+      font-size: 12px;
+      color: var(--warn-text);
+    }
+    .import-result-title { font-weight: 600; }
+    .import-result-sub { margin-top: 2px; font-size: 11px; }
+
+    /* === EMPTY / ERROR STATES === */
+    .empty-state {
+      border-radius: 16px;
+      border: 1px dashed var(--border-soft);
+      padding: 48px 32px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+    .empty-state-title { font-size: 16px; font-weight: 600; color: var(--text-soft); }
+    .empty-state-text { margin-top: 8px; font-size: 13px; }
+    .error-state {
+      border-radius: 16px;
+      border: 1px solid var(--error-border);
+      background: var(--error-surface);
+      padding: 24px;
+      color: var(--error-text);
+    }
+    .error-state-title { font-size: 15px; font-weight: 600; }
+    .error-state-text { margin-top: 8px; font-size: 13px; }
+
+    /* === BOARD TITLE ROW === */
+    .board-title-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+    .board-title { font-size: 20px; font-weight: 700; color: var(--text-strong); }
+    .board-subtitle { font-size: 13px; color: var(--text-muted); margin-left: 12px; }
+
+    /* === ADMIN === */
+    .admin-page { min-height: 100vh; padding: 32px 24px; background: var(--page-bg); }
+    .admin-inner { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+    .admin-header { border-radius: 24px; border: 1px solid var(--border-soft); background: var(--surface); padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.06); display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+    .admin-board-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+    .admin-board-tab {
+      display: flex; align-items: center; gap: 4px;
+      border-radius: 12px; border: 1px solid var(--border-soft);
+      background: var(--surface); color: var(--text-soft);
+      overflow: hidden;
+    }
+    .admin-board-tab.active { border-color: var(--accent); background: var(--accent); color: white; }
+    .admin-board-tab-btn { padding: 8px 16px; font-size: 13px; font-weight: 500; background: none; border: none; cursor: pointer; color: inherit; }
+    .admin-board-tab-arrows { display: flex; gap: 2px; padding-right: 6px; }
+    .admin-board-tab-arrows button { border-radius: 6px; border: 1px solid rgba(255,255,255,.25); background: none; padding: 4px 6px; font-size: 11px; color: inherit; cursor: pointer; }
+    .admin-board-tab-arrows button:disabled { opacity: 0.3; cursor: not-allowed; }
+    .admin-column-section { display: flex; flex-direction: column; gap: 16px; }
+    .admin-column-section-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .admin-col-card { border-radius: 16px; border: 1px solid var(--border-soft); background: var(--surface); padding: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+    .admin-col-card.editing { border-color: var(--accent); }
+    .admin-col-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+    .admin-col-actions { display: flex; flex-shrink: 0; gap: 8px; }
+    .admin-col-name { font-size: 15px; font-weight: 600; color: var(--text-strong); }
+    .admin-col-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--text-muted); }
+    .admin-col-rules { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .admin-rule-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      border-radius: 8px; border: 1px solid var(--border-soft);
+      background: var(--surface-raised); padding: 4px 10px;
+      font-family: monospace; font-size: 13px; color: var(--text-soft);
+    }
+    .admin-rule-remove { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; line-height: 1; padding: 0; }
+    .admin-rule-remove:hover { color: #dc2626; }
+    .form-field { display: flex; flex-direction: column; gap: 4px; }
+    .form-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+    .form-row { display: flex; gap: 8px; margin-top: 4px; }
+    .form-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-soft); cursor: pointer; }
+    .form-check input { cursor: pointer; }
+    .error-box { border-radius: 12px; border: 1px solid var(--error-border); background: var(--error-surface); padding: 10px 14px; font-size: 12px; color: var(--error-text); }
+
+    /* === THEME TOGGLE === */
+    .theme-toggle {
+      border-radius: 12px; border: 1px solid var(--border-soft);
+      background: transparent; padding: 6px 12px;
+      font-size: 16px; cursor: pointer; color: var(--text-muted);
+      transition: color 120ms;
+    }
+    .theme-toggle:hover { color: var(--text-strong); }
+
+    /* === MISC === */
+    .flex { display: flex; }
+    .flex-col { flex-direction: column; }
+    .items-center { align-items: center; }
+    .items-start { align-items: flex-start; }
+    .justify-between { justify-content: space-between; }
+    .gap-2 { gap: 8px; }
+    .gap-3 { gap: 12px; }
+    .gap-4 { gap: 16px; }
+    .mt-1 { margin-top: 4px; }
+    .mt-2 { margin-top: 8px; }
+    .mt-3 { margin-top: 12px; }
+    .mt-4 { margin-top: 16px; }
+    .text-sm { font-size: 12px; }
+    .text-xs { font-size: 11px; }
+    .font-medium { font-weight: 500; }
+    .font-semibold { font-weight: 600; }
+    .text-muted { color: var(--text-muted); }
+    .text-soft { color: var(--text-soft); }
+    .text-strong { color: var(--text-strong); }
+    .hidden { display: none; }
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border-soft); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .rename-form { display: flex; align-items: center; gap: 8px; flex: 1; }
+    .rename-input {
+      border-radius: 12px; border: 1px solid var(--accent);
+      background: var(--surface-raised); padding: 6px 12px;
+      font-size: 15px; font-weight: 600; color: var(--text-strong);
+      outline: none;
+    }
+    .rename-input:focus { box-shadow: 0 0 0 2px var(--accent-muted); }
+    .admin-import-section { border-radius: 16px; border: 1px solid var(--border-soft); background: var(--surface); padding: 20px; }
+    .import-run-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border-soft); font-size: 12px; }
+    .import-run-row:last-child { border-bottom: none; }
+    .status-ok { color: #16a34a; font-weight: 600; }
+    .status-err { color: var(--error-text); font-weight: 600; }
+    .status-running { color: var(--accent); font-weight: 600; }
+    .board-create-form { border-radius: 16px; border: 1px solid var(--accent); background: var(--surface); padding: 20px; }
+    .board-create-form-title { font-size: 13px; font-weight: 600; margin-bottom: 16px; color: var(--text-strong); }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+/* ============================================================
+   UTILS
+   ============================================================ */
+function uid() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
+function slug(str) {
+  return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function esc(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatDate(isoStr) {
+  if (!isoStr) return null;
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return null;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}.${month}.${year}`;
+}
+
+function formatDateTime(isoStr) {
+  if (!isoStr) return 'Keine Zeit vorhanden';
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return 'Ungültig';
+  const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0 || d.getSeconds() !== 0;
+  if (hasTime) {
+    return new Intl.DateTimeFormat('de-DE', { dateStyle: 'short', timeStyle: 'short' }).format(d);
+  }
+  return new Intl.DateTimeFormat('de-DE', { dateStyle: 'short' }).format(d);
+}
+
+function isOverdue(isoStr) {
+  if (!isoStr) return false;
+  return new Date(isoStr) < new Date();
+}
+
+/* ============================================================
+   STORAGE
+   ============================================================ */
+const STORAGE_KEY = 'kanban_state';
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('Fehler beim Laden des Zustands:', e);
+    return null;
+  }
+}
+
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
+  } catch (e) {
+    alert('Fehler beim Speichern: ' + e.message);
+  }
+}
+
+/* ============================================================
+   SEED DATA (MVP BOARDS)
+   ============================================================ */
+const MVP_BOARD_COLUMNS_DEF = [
+  { key: 'eingang',         name: 'Eingang und Steuerung',         sortOrder: 10,  isFallback: false, vorgangsNos: ['0010','0020','0030','0050','0060','0070','0080','0090','0140'] },
+  { key: 'eingangspruefung',name: 'Eingangsprüfung',               sortOrder: 20,  isFallback: false, vorgangsNos: ['0100'] },
+  { key: 'vorbereitung',    name: 'Vorbereitung und Befund',       sortOrder: 30,  isFallback: false, vorgangsNos: ['0200','0210','0300','0310','0350','0400'] },
+  { key: 'kostenvoranschlag',name: 'Kostenvoranschlag',            sortOrder: 40,  isFallback: false, vorgangsNos: ['0500'] },
+  { key: 'reparatur',       name: 'Reparatur und Montage',         sortOrder: 50,  isFallback: false, vorgangsNos: ['0600','0610','0620'] },
+  { key: 'test',            name: 'Test',                          sortOrder: 60,  isFallback: false, vorgangsNos: ['0800','0810'] },
+  { key: 'abschluss',       name: 'Abschluss',                     sortOrder: 70,  isFallback: false, vorgangsNos: ['0900','0910'] },
+  { key: 'dokumentation',   name: 'Dokumentation und Zertifizierung', sortOrder: 80, isFallback: false, vorgangsNos: ['0110','0120','0130','1000','1010'] },
+  { key: 'unklar',          name: 'Unklar',                        sortOrder: 999, isFallback: true,  vorgangsNos: [] },
+];
+
+function buildColumnsForBoard(boardId) {
+  return MVP_BOARD_COLUMNS_DEF.map(col => ({
+    id: uid(),
+    boardId,
+    key: col.key,
+    name: col.name,
+    sortOrder: col.sortOrder,
+    isFallback: col.isFallback,
+    rules: col.vorgangsNos.map(vno => ({ id: uid(), vorgangsNo: vno })),
+  }));
+}
+
+function createInitialState() {
+  const mvpBoardDefs = [
+    { key: 'arbeitsplatz-33322010', name: 'Arbeitsplatz 33322010', sortOrder: 10,  arbeitsplatz: '33322010' },
+    { key: 'arbeitsplatz-33425010', name: 'Arbeitsplatz 33425010', sortOrder: 20,  arbeitsplatz: '33425010' },
+    { key: 'arbeitsplatz-33425020', name: 'Arbeitsplatz 33425020', sortOrder: 30,  arbeitsplatz: '33425020' },
+    { key: 'arbeitsplatz-33425030', name: 'Arbeitsplatz 33425030', sortOrder: 40,  arbeitsplatz: '33425030' },
+    { key: 'arbeitsplatz-33425040', name: 'Arbeitsplatz 33425040', sortOrder: 50,  arbeitsplatz: '33425040' },
+    { key: 'arbeitsplatz-33425050', name: 'Arbeitsplatz 33425050', sortOrder: 60,  arbeitsplatz: '33425050' },
+    { key: 'arbeitsplatz-33461910', name: 'Arbeitsplatz 33461910', sortOrder: 70,  arbeitsplatz: '33461910' },
+  ];
+
+  const boards = mvpBoardDefs.map(def => {
+    const id = uid();
+    return {
+      id,
+      key: def.key,
+      name: def.name,
+      sortOrder: def.sortOrder,
+      isFallback: false,
+      boardRules: [{ id: uid(), matchType: 'EXACT', matchValue: def.arbeitsplatz, priority: 1 }],
+      columns: buildColumnsForBoard(id),
+    };
+  });
+
+  // Fallback board
+  const fallbackId = uid();
+  boards.push({
+    id: fallbackId,
+    key: 'unzugeordnet',
+    name: 'Unzugeordnet',
+    sortOrder: 9999,
+    isFallback: true,
+    boardRules: [],
+    columns: [{
+      id: uid(),
+      boardId: fallbackId,
+      key: 'unklar',
+      name: 'Unklar',
+      sortOrder: 999,
+      isFallback: true,
+      rules: [],
+    }],
+  });
+
+  return { boards, currentCards: [], importRuns: [], normalizedRows: [] };
+}
+
+let STATE = loadState() || createInitialState();
+// Migrate old states that might be missing normalizedRows
+if (!STATE.normalizedRows) STATE.normalizedRows = [];
+saveState();
+
+/* ============================================================
+   CSV PARSING (inline, no PapaParse needed)
+   ============================================================ */
+function parseCSVContent(content) {
+  // Handle BOM
+  if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let inQuote = false;
+  let i = 0;
+
+  while (i < content.length) {
+    const ch = content[i];
+    const next = content[i + 1];
+
+    if (inQuote) {
+      if (ch === '"' && next === '"') { cell += '"'; i += 2; continue; }
+      if (ch === '"') { inQuote = false; i++; continue; }
+      cell += ch; i++; continue;
+    }
+
+    if (ch === '"') { inQuote = true; i++; continue; }
+
+    if (ch === ';') {
+      row.push(cell); cell = ''; i++; continue;
+    }
+
+    if (ch === '\r' && next === '\n') {
+      row.push(cell); rows.push(row); row = []; cell = ''; i += 2; continue;
+    }
+    if (ch === '\n' || ch === '\r') {
+      row.push(cell); rows.push(row); row = []; cell = ''; i++; continue;
+    }
+
+    cell += ch; i++;
+  }
+
+  if (cell || row.length > 0) {
+    row.push(cell);
+    if (row.some(c => c.trim() !== '')) rows.push(row);
+  }
+
+  return rows;
+}
+
+/* ============================================================
+   NORMALIZATION
+   ============================================================ */
+const GERMAN_DATE_PATTERN = /^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+const NORMALIZED_DECIMAL_PATTERN = /^-?\d+(?:\.\d+)?$/;
+
+function parseGermanDate(value) {
+  if (!value) return null;
+  const v = value.trim();
+  const match = v.match(GERMAN_DATE_PATTERN);
+  if (!match) return null;
+  const [, day, month, year, hour = '0', minute = '0', second = '0'] = match;
+  const d = new Date(+year, +month - 1, +day, +hour, +minute, +second, 0);
+  if (isNaN(d.getTime())) return null;
+  if (d.getFullYear() !== +year || d.getMonth() !== +month - 1 || d.getDate() !== +day) return null;
+  return d.toISOString();
+}
+
+function parseGermanDecimal(value) {
+  if (!value) return null;
+  const v = value.trim();
+  const dec = v.replace(/\./g, '').replace(',', '.');
+  if (!NORMALIZED_DECIMAL_PATTERN.test(dec)) return null;
+  return dec;
+}
+
+function normalizeText(value) {
+  const v = (value ?? '').trim();
+  return v === '' ? null : v;
+}
+
+const REQUIRED_FIELDS = [
+  'MELDUNGS_NO','AUFTRAGS_NO','VORGANGS_NO','STAMM_PART_NO',
+  'IST_START_VORG','IST_ENDE_VORG','LANGTEXT_VORG','ARBEITSPLATZ_VORG',
+  'STAMM_SERIAL_NO','SERIAL_NO','BEZEICHNUNG','KURZ_BEZ','KUNDENNAME',
+  'AGE_AUN','TERMINTREU_BIS','GEW_ENDE'
+];
+
+function buildNormalizedRow(rowNumber, rawValues, rowIssues) {
+  const normIssues = [...rowIssues];
+
+  const meldungsNo = normalizeText(rawValues['MELDUNGS_NO']);
+  const vorgangsNo = normalizeText(rawValues['VORGANGS_NO']);
+
+  if (!meldungsNo) normIssues.push('Pflichtfeld MELDUNGS_NO ist leer.');
+  if (!vorgangsNo) normIssues.push('Pflichtfeld VORGANGS_NO ist leer.');
+  if (!meldungsNo || !vorgangsNo) return null;
+
+  function normDate(field) {
+    const v = normalizeText(rawValues[field]);
+    if (!v) return null;
+    const d = parseGermanDate(v);
+    if (!d) normIssues.push(`Datumswert in ${field} ist ungültig: ${v}`);
+    return d;
+  }
+  function normDec(field) {
+    const v = normalizeText(rawValues[field]);
+    if (!v) return null;
+    const d = parseGermanDecimal(v);
+    if (!d) normIssues.push(`Dezimalwert in ${field} ist ungültig: ${v}`);
+    return d;
+  }
+
+  return {
+    id: uid(),
+    rowNumber,
+    normalizationIssues: normIssues,
+    meldungsNo,
+    auftragsNo: normalizeText(rawValues['AUFTRAGS_NO']),
+    vorgangsNo,
+    stammPartNo: normalizeText(rawValues['STAMM_PART_NO']),
+    istStartVorg: normDate('IST_START_VORG'),
+    istEndeVorg: normDate('IST_ENDE_VORG'),
+    langtextVorg: normalizeText(rawValues['LANGTEXT_VORG']),
+    arbeitsplatzVorg: normalizeText(rawValues['ARBEITSPLATZ_VORG']),
+    stammSerialNo: normalizeText(rawValues['STAMM_SERIAL_NO']),
+    serialNo: normalizeText(rawValues['SERIAL_NO']),
+    bezeichnung: normalizeText(rawValues['BEZEICHNUNG']),
+    kurzBez: normalizeText(rawValues['KURZ_BEZ']),
+    kundenname: normalizeText(rawValues['KUNDENNAME']),
+    ageAun: normDec('AGE_AUN'),
+    termintreuBis: normDate('TERMINTREU_BIS'),
+    gewEnde: normDec('GEW_ENDE'),
+    eckende: normDate('ECKENDE'),
+    steuerschlVorg: normalizeText(rawValues['STEUERSCHL_VORG']),
+  };
+}
+
+function parseAndNormalizeCSV(content, fileName) {
+  const matrix = parseCSVContent(content);
+  if (matrix.length === 0) throw new Error('Die CSV-Datei enthält keine Daten.');
+
+  const headerRow = matrix[0].map(h => h.replace(/^\uFEFF/, '').trim());
+
+  // Check required headers
+  const missing = REQUIRED_FIELDS.filter(h => !headerRow.includes(h));
+  if (missing.length > 0) {
+    throw new Error(`Pflichtfelder fehlen: ${missing.join(', ')}`);
+  }
+
+  // Check duplicates
+  const dups = headerRow.filter((h, i) => h && headerRow.indexOf(h) !== i);
+  if (dups.length > 0) throw new Error(`Doppelte Spalten: ${dups.join(', ')}`);
+
+  const rows = [];
+  let rowNumber = 1;
+
+  for (const cells of matrix.slice(1)) {
+    if (cells.every(c => !c.trim())) continue;
+
+    const rawValues = {};
+    const rowIssues = [];
+
+    headerRow.forEach((header, idx) => {
+      const v = (cells[idx] ?? '').trim();
+      rawValues[header] = v === '' ? null : v;
+    });
+
+    if (cells.length < headerRow.length) {
+      rowIssues.push(`Zeile hat zu wenige Spalten: erwartet ${headerRow.length}, erhalten ${cells.length}.`);
+    }
+
+    const normalized = buildNormalizedRow(rowNumber, rawValues, rowIssues);
+    if (normalized) {
+      rows.push({ normalized, rawValues, rowIssues });
+    }
+    rowNumber++;
+  }
+
+  return { rows, totalRawRows: rowNumber - 1 };
+}
+
+/* ============================================================
+   CARD DERIVATION
+   ============================================================ */
+function groupRowsByMeldungsNo(rows) {
+  const map = new Map();
+  for (const row of rows) {
+    const key = row.meldungsNo;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(row);
+  }
+  return map;
+}
+
+function selectRelevantActivity(row) {
+  if (row.istEndeVorg) return { at: row.istEndeVorg, source: 'END' };
+  if (row.istStartVorg) return { at: row.istStartVorg, source: 'START' };
+  return { at: null, source: 'NONE' };
+}
+
+function compareVorgangsNo(left, right) {
+  if (left === right) return 0;
+  const leftInt = /^-?\d+$/.test(left);
+  const rightInt = /^-?\d+$/.test(right);
+  if (leftInt && rightInt) {
+    const l = BigInt(left), r = BigInt(right);
+    return l === r ? 0 : l > r ? 1 : -1;
+  }
+  return left.localeCompare(right, 'de', { numeric: true, sensitivity: 'base' });
+}
+
+function selectLeadingRow(rows) {
+  const withTime = rows.filter(r => selectRelevantActivity(r).at !== null);
+
+  if (withTime.length === 0) {
+    const fallback = [...rows].sort((a, b) => {
+      const vc = compareVorgangsNo(b.vorgangsNo, a.vorgangsNo);
+      if (vc !== 0) return vc;
+      return b.rowNumber - a.rowNumber;
+    })[0];
+    return { row: fallback, activity: selectRelevantActivity(fallback), warning: 'Kein Aktivitätszeitpunkt vorhanden. Kartenposition bitte prüfen.' };
+  }
+
+  const latestTime = Math.max(...withTime.map(r => new Date(selectRelevantActivity(r).at).getTime()));
+  const latestRows = withTime.filter(r => new Date(selectRelevantActivity(r).at).getTime() === latestTime);
+
+  if (latestRows.length === 1) {
+    return { row: latestRows[0], activity: selectRelevantActivity(latestRows[0]), warning: null };
+  }
+
+  const highestVorg = latestRows.reduce((best, r) => compareVorgangsNo(r.vorgangsNo, best.vorgangsNo) > 0 ? r : best);
+  const tied = latestRows.filter(r => compareVorgangsNo(r.vorgangsNo, highestVorg.vorgangsNo) === 0);
+
+  if (tied.length === 1) {
+    return { row: highestVorg, activity: selectRelevantActivity(highestVorg), warning: null };
+  }
+
+  const stable = [...tied].sort((a, b) => {
+    const vc = compareVorgangsNo(b.vorgangsNo, a.vorgangsNo);
+    if (vc !== 0) return vc;
+    return b.rowNumber - a.rowNumber;
+  })[0];
+  return { row: stable, activity: selectRelevantActivity(stable), warning: 'Führende Zeile ist trotz Zeit- und Vorgangsvergleich nicht eindeutig. Bitte prüfen.' };
+}
+
+function matchesBoardRule(value, matchType, matchValue) {
+  if (matchType === 'EXACT') return value === matchValue;
+  if (matchType === 'PREFIX') return value.startsWith(matchValue);
+  return value.includes(matchValue);
+}
+
+function resolveBoardAssignment(boards, arbeitsplatzVorg) {
+  const fallback = boards.find(b => b.isFallback);
+  if (!fallback) throw new Error('Kein Fallback-Board konfiguriert.');
+
+  if (!arbeitsplatzVorg) {
+    return { board: fallback, warning: 'Kein ARBEITSPLATZ_VORG vorhanden. Board auf Unzugeordnet gesetzt.' };
+  }
+
+  const matches = boards.flatMap(board =>
+    board.boardRules
+      .filter(rule => matchesBoardRule(arbeitsplatzVorg, rule.matchType, rule.matchValue))
+      .map(rule => ({ board, priority: rule.priority }))
+  ).sort((a, b) => a.priority - b.priority);
+
+  if (matches.length === 0) {
+    return { board: fallback, warning: `Keine Board-Regel greift für ARBEITSPLATZ_VORG ${arbeitsplatzVorg}.` };
+  }
+
+  const bestPriority = matches[0].priority;
+  const bestBoards = [...new Map(matches.filter(m => m.priority === bestPriority).map(m => [m.board.id, m.board])).values()];
+
+  if (bestBoards.length > 1) {
+    return { board: fallback, warning: 'Mehrere Board-Regeln greifen gleichrangig. Board auf Unzugeordnet gesetzt.' };
+  }
+
+  return { board: bestBoards[0], warning: null };
+}
+
+function resolveColumnAssignment(board, vorgangsNo) {
+  const fallbackCols = board.columns.filter(c => c.isFallback);
+  if (fallbackCols.length !== 1) throw new Error(`Board ${board.key} braucht genau eine Fallback-Spalte.`);
+  const fallback = fallbackCols[0];
+
+  const matching = board.columns.filter(col => col.rules.some(r => r.vorgangsNo === vorgangsNo));
+
+  if (matching.length === 0) {
+    return { column: fallback, warning: `Keine Spalten-Regel greift für VORGANGS_NO ${vorgangsNo}.` };
+  }
+  if (matching.length > 1) {
+    return { column: fallback, warning: 'Mehrere Spalten-Regeln greifen für dieselbe VORGANGS_NO. Spalte auf Unklar gesetzt.' };
+  }
+  return { column: matching[0], warning: null };
+}
+
+function deriveCurrentCard(meldungsNo, rows, boards) {
+  const leading = selectLeadingRow(rows);
+  const boardAssign = resolveBoardAssignment(boards, leading.row.arbeitsplatzVorg);
+  const colAssign = resolveColumnAssignment(boardAssign.board, leading.row.vorgangsNo);
+
+  const auftragsNos = [...new Set(rows.map(r => r.auftragsNo).filter(Boolean))];
+  const stammPartNos = [...new Set(rows.map(r => r.stammPartNo).filter(Boolean))];
+
+  const warnings = [
+    leading.warning,
+    boardAssign.warning,
+    colAssign.warning,
+    auftragsNos.length > 1 ? `Mehrere AUFTRAGS_NO-Werte: ${auftragsNos.join(', ')}` : null,
+    stammPartNos.length > 1 ? `Mehrere STAMM_PART_NO-Werte: ${stammPartNos.join(', ')}` : null,
+    leading.row.normalizationIssues.length > 0
+      ? `Führende Zeile hat Normalisierungshinweise: ${leading.row.normalizationIssues.join('; ')}`
+      : null,
+  ].filter(Boolean);
+
+  return {
+    id: uid(),
+    meldungsNo,
+    auftragsNo: leading.row.auftragsNo,
+    stammPartNo: leading.row.stammPartNo,
+    stammSerialNo: leading.row.stammSerialNo,
+    serialNo: leading.row.serialNo,
+    kurzBez: leading.row.kurzBez,
+    bezeichnung: leading.row.bezeichnung,
+    kundenname: leading.row.kundenname,
+    ageAun: leading.row.ageAun,
+    termintreuBis: leading.row.termintreuBis,
+    gewEnde: leading.row.gewEnde,
+    eckende: leading.row.eckende,
+    currentVorgangsNo: leading.row.vorgangsNo,
+    currentActivityAt: leading.activity.at,
+    activityTimeSource: leading.activity.source,
+    boardId: boardAssign.board.id,
+    boardKey: boardAssign.board.key,
+    columnId: colAssign.column.id,
+    columnKey: colAssign.column.key,
+    derivationWarning: warnings.length > 0 ? warnings.join(' | ') : null,
+    importRunId: null, // set after
+    manualColumnOverride: false,
+  };
+}
+
+function deriveCurrentCards(normalizedRows, boards) {
+  const grouped = groupRowsByMeldungsNo(normalizedRows);
+  const cards = [];
+  for (const [meldungsNo, rows] of [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b, 'de'))) {
+    try {
+      cards.push(deriveCurrentCard(meldungsNo, rows, boards));
+    } catch (e) {
+      console.warn(`Fehler bei Meldung ${meldungsNo}:`, e);
+    }
+  }
+  return cards;
+}
+
+/* ============================================================
+   IMPORT LOGIC
+   ============================================================ */
+async function runImport(files) {
+  if (!files || files.length === 0) throw new Error('Keine Dateien ausgewählt.');
+
+  const importRunId = uid();
+  const sourceFileName = [...files].map(f => f.name).join(', ');
+  const startedAt = new Date().toISOString();
+
+  // Read all files, detect encoding
+  const allRows = [];
+  let rowOffset = 0;
+
+  for (const file of files) {
+    if (file.size === 0) throw new Error(`Datei "${file.name}" ist leer.`);
+
+    const buffer = await file.arrayBuffer();
+    const uint8 = new Uint8Array(buffer);
+
+    // Try UTF-8, fallback to Windows-1252
+    let content;
+    try {
+      const dec = new TextDecoder('utf-8', { fatal: true });
+      content = dec.decode(uint8);
+    } catch {
+      // Fallback: decode as latin1 (approximates win1252 for European characters)
+      const dec = new TextDecoder('windows-1252');
+      content = dec.decode(uint8);
+    }
+
+    const { rows: parsed, totalRawRows } = parseAndNormalizeCSV(content, file.name);
+    for (const row of parsed) {
+      allRows.push({ ...row.normalized, rowNumber: row.normalized.rowNumber + rowOffset });
+    }
+    rowOffset += totalRawRows;
+  }
+
+  const newCards = deriveCurrentCards(allRows, STATE.boards);
+  newCards.forEach(c => c.importRunId = importRunId);
+
+  const importRun = {
+    id: importRunId,
+    sourceFileName,
+    startedAt,
+    finishedAt: new Date().toISOString(),
+    status: 'COMPLETED',
+    rowCount: allRows.length,
+    normalizedRowCount: allRows.length,
+  };
+
+  // Store rows for detail view (keep all import rows, tagged with importRunId)
+  const rowsWithImportId = allRows.map(r => ({ ...r, importRunId }));
+
+  STATE.importRuns = [importRun, ...STATE.importRuns];
+  STATE.normalizedRows = [...rowsWithImportId, ...STATE.normalizedRows];
+  STATE.currentCards = newCards;
+  saveState();
+
+  return {
+    importRunId,
+    sourceFileName,
+    normalizedRowCount: newCards.length,
+    rejectedRowCount: allRows.length - newCards.length,
+  };
+}
+
+/* ============================================================
+   BOARD QUERIES
+   ============================================================ */
+function getBoardSummaries() {
+  return STATE.boards
+    .map(b => ({
+      id: b.id,
+      key: b.key,
+      name: b.name,
+      sortOrder: b.sortOrder,
+      isFallback: b.isFallback,
+      cardCount: STATE.currentCards.filter(c => c.boardKey === b.key).length,
+    }))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+function applyFilters(cards, filters) {
+  return cards.filter(card => {
+    if (filters.meldungsNo && !card.meldungsNo.includes(filters.meldungsNo)) return false;
+    if (filters.stammPartNo && !(card.stammPartNo ?? '').toLowerCase().includes(filters.stammPartNo.toLowerCase())) return false;
+    if (filters.serialNo) {
+      const sn = (card.stammSerialNo ?? card.serialNo ?? '').toLowerCase();
+      if (!sn.includes(filters.serialNo.toLowerCase())) return false;
+    }
+    if (filters.kundenname && !(card.kundenname ?? '').toLowerCase().includes(filters.kundenname.toLowerCase())) return false;
+    if (filters.search) {
+      const s = filters.search.toLowerCase();
+      const haystack = [
+        card.meldungsNo,
+        card.stammPartNo,
+        card.stammSerialNo,
+        card.serialNo,
+        card.kundenname,
+        card.auftragsNo,
+      ].map(v => (v ?? '').toLowerCase()).join(' ');
+      if (!haystack.includes(s)) return false;
+    }
+    return true;
+  });
+}
+
+function getBoardView(boardKey, filters) {
+  const board = STATE.boards.find(b => b.key === boardKey);
+  if (!board) return null;
+
+  const allBoardCards = STATE.currentCards.filter(c => c.boardKey === boardKey);
+  const filteredCards = applyFilters(allBoardCards, filters);
+
+  // Build columns with filtered cards
+  const columns = [...board.columns]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map(col => {
+      const cards = filteredCards
+        .filter(c => c.columnKey === col.key)
+        .sort((a, b) => {
+          if (a.currentActivityAt && b.currentActivityAt) {
+            return new Date(b.currentActivityAt) - new Date(a.currentActivityAt);
+          }
+          return a.meldungsNo.localeCompare(b.meldungsNo, 'de');
+        });
+      return { ...col, cards };
+    });
+
+  // Metrics
+  const allCards = STATE.currentCards;
+  const unclearCol = board.columns.find(c => c.isFallback);
+  const unclearCardCount = unclearCol
+    ? allBoardCards.filter(c => c.columnKey === unclearCol.key).length
+    : 0;
+  const fallbackBoard = STATE.boards.find(b => b.isFallback);
+  const unzugeordnetCardCount = fallbackBoard
+    ? STATE.currentCards.filter(c => c.boardKey === fallbackBoard.key).length
+    : 0;
+  const overdueCardCount = allBoardCards.filter(c => isOverdue(c.eckende)).length;
+
+  const cardsPerColumn = columns.map(col => ({
+    columnId: col.id,
+    columnKey: col.key,
+    columnName: col.name,
+    cardCount: allBoardCards.filter(c => c.columnKey === col.key).length,
+    isFallback: col.isFallback,
+  }));
+
+  return {
+    id: board.id,
+    key: board.key,
+    name: board.name,
+    isFallback: board.isFallback,
+    totalCardCount: allBoardCards.length,
+    filteredCardCount: filteredCards.length,
+    filters,
+    columns,
+    metrics: {
+      boardCardCount: allBoardCards.length,
+      unclearCardCount,
+      unzugeordnetCardCount,
+      overdueCardCount,
+      cardsPerColumn,
+    },
+  };
+}
+
+function getCardDetail(meldungsNo) {
+  const card = STATE.currentCards.find(c => c.meldungsNo === meldungsNo);
+
+  // Find all normalized rows for this meldungsNo across all imports
+  const allRows = STATE.normalizedRows
+    .filter(r => r.meldungsNo === meldungsNo)
+    .sort((a, b) => {
+      const ta = a.istEndeVorg || a.istStartVorg || '';
+      const tb = b.istEndeVorg || b.istStartVorg || '';
+      if (ta && tb) return new Date(tb) - new Date(ta);
+      return b.rowNumber - a.rowNumber;
+    });
+
+  if (!card && allRows.length === 0) return null;
+
+  const board = card ? STATE.boards.find(b => b.key === card.boardKey) : null;
+  const column = board ? board.columns.find(c => c.key === card.columnKey) : null;
+  const importRun = card ? STATE.importRuns.find(r => r.id === card.importRunId) : null;
+
+  // Process history: all unique rows for this meldungsNo
+  const processHistory = allRows.map(row => {
+    const run = STATE.importRuns.find(r => r.id === row.importRunId);
+    const act = selectRelevantActivity(row);
+    return {
+      id: row.id,
+      importRun: run ? { id: run.id, sourceFileName: run.sourceFileName, startedAt: run.startedAt } : null,
+      rowNumber: row.rowNumber,
+      vorgangsNo: row.vorgangsNo,
+      langtextVorg: row.langtextVorg,
+      arbeitsplatzVorg: row.arbeitsplatzVorg,
+      istStartVorg: row.istStartVorg,
+      istEndeVorg: row.istEndeVorg,
+      stammSerialNo: row.stammSerialNo,
+      serialNo: row.serialNo,
+      normalizationIssues: row.normalizationIssues || [],
+      rowIssues: [],
+      activityAt: act.at,
+    };
+  });
+
+  return {
+    isCurrentCard: !!card,
+    meldungsNo,
+    auftragsNo: card?.auftragsNo ?? null,
+    stammPartNo: card?.stammPartNo ?? null,
+    stammSerialNo: card?.stammSerialNo ?? null,
+    serialNo: card?.serialNo ?? null,
+    kundenname: card?.kundenname ?? null,
+    currentVorgangsNo: card?.currentVorgangsNo ?? null,
+    currentActivityAt: card?.currentActivityAt ?? null,
+    activityTimeSource: card?.activityTimeSource ?? 'NONE',
+    derivationWarning: card?.derivationWarning ?? null,
+    board: board ? { id: board.id, key: board.key, name: board.name } : null,
+    column: column ? { id: column.id, key: column.key, name: column.name } : null,
+    importRun: importRun ? { id: importRun.id, sourceFileName: importRun.sourceFileName, startedAt: importRun.startedAt } : null,
+    eckende: card?.eckende ?? null,
+    processHistory,
+  };
+}
+
+/* ============================================================
+   APP STATE
+   ============================================================ */
+const APP = {
+  view: 'board', // 'board' | 'admin'
+  selectedBoardKey: null,
+  selectedCardMeldungsNo: null,
+  filters: { search: '', meldungsNo: '', stammPartNo: '', serialNo: '', kundenname: '' },
+  adminSelectedBoardKey: null,
+  adminEditingColumnId: null,
+  adminShowCreateForm: false,
+  adminRenamingBoard: false,
+  adminBoardNameInput: '',
+  adminShowCreateBoard: false,
+  importState: { status: 'idle', message: null, result: null }, // idle | loading | success | error
+  dragCardId: null,
+};
+
+function getBoardKey() {
+  if (APP.selectedBoardKey) return APP.selectedBoardKey;
+  const summaries = getBoardSummaries();
+  return summaries[0]?.key ?? null;
+}
+
+/* ============================================================
+   SCROLL SAVE/RESTORE
+   ============================================================ */
+function saveScrollPositions() {
+  const pos = {};
+  document.querySelectorAll('[data-col-scroll]').forEach(el => {
+    pos[el.dataset.colScroll] = el.scrollTop;
+  });
+  return pos;
+}
+function restoreScrollPositions(pos) {
+  document.querySelectorAll('[data-col-scroll]').forEach(el => {
+    const saved = pos[el.dataset.colScroll];
+    if (saved != null) el.scrollTop = saved;
+  });
+}
+
+/* ============================================================
+   RENDER HELPERS
+   ============================================================ */
+function renderBadge(text, tone = 'default') {
+  const cls = tone === 'warn' ? 'badge badge-warn' : tone === 'accent' ? 'badge badge-accent' : 'badge';
+  return `<span class="${cls}">${esc(text)}</span>`;
+}
+
+function renderMetrics(metrics) {
+  const parts = [];
+  parts.push(`<span class="badge">${renderNum(metrics.boardCardCount)} Karten gesamt</span>`);
+  if (metrics.unclearCardCount > 0) parts.push(`<span class="badge badge-warn">Unklar: <strong>${renderNum(metrics.unclearCardCount)}</strong></span>`);
+  if (metrics.overdueCardCount > 0) parts.push(`<span class="badge badge-warn">Überfällig: <strong>${renderNum(metrics.overdueCardCount)}</strong></span>`);
+  parts.push('<span class="metrics-divider"></span>');
+  for (const col of metrics.cardsPerColumn) {
+    parts.push(`<span class="badge ${col.isFallback ? 'badge-warn' : ''}">${esc(col.columnName)}: <strong>${renderNum(col.cardCount)}</strong></span>`);
+  }
+  return `<div class="metrics">${parts.join('')}</div>`;
+}
+
+function renderNum(n) {
+  return String(n);
+}
+
+/* ============================================================
+   BOARD VIEW RENDER
+   ============================================================ */
+function renderBoardView() {
+  const boardKey = getBoardKey();
+  const summaries = getBoardSummaries();
+
+  if (summaries.length === 0) {
+    return `
+      <main class="page">
+        <div class="page-inner">
+          ${renderScreenHeader()}
+          <div class="empty-state">
+            <p class="empty-state-title">Noch keine Boards vorhanden</p>
+            <p class="empty-state-text">Lege zuerst Boards und Spalten in der Verwaltung an und importiere dann einen Bestand.</p>
+          </div>
+        </div>
+      </main>`;
+  }
+
+  const boardView = boardKey ? getBoardView(boardKey, APP.filters) : null;
+
+  if (!boardView) {
+    return `
+      <main class="page">
+        <div class="page-inner">
+          ${renderScreenHeader()}
+          ${renderBoardSelector(summaries, null)}
+          <div class="error-state">
+            <p class="error-state-title">Board nicht gefunden</p>
+            <p class="error-state-text">Das angeforderte Board existiert nicht.</p>
+          </div>
+        </div>
+      </main>`;
+  }
+
+  const selectedCard = APP.selectedCardMeldungsNo ? getCardDetail(APP.selectedCardMeldungsNo) : null;
+  const hasCards = boardView.filteredCardCount > 0;
+
+  return `
+    <main class="page">
+      <div class="page-inner">
+        ${renderScreenHeader()}
+        ${renderBoardSelector(summaries, boardKey)}
+        ${renderFilterBar(boardKey)}
+        <div class="board-title-row">
+          <div class="flex items-center gap-3">
+            <span class="board-title">${esc(boardView.name)}</span>
+            <span class="board-subtitle">${esc(String(boardView.filteredCardCount))} von ${esc(String(boardView.totalCardCount))} Karten</span>
+            ${boardView.isFallback ? renderBadge('Fallback', 'warn') : ''}
+          </div>
+          ${renderMetrics(boardView.metrics)}
+        </div>
+        ${hasCards
+          ? `<div class="board-area${selectedCard ? ' with-detail' : ''}">
+               ${renderBoardColumns(boardView, selectedCard)}
+               ${selectedCard ? renderDetailPanel(selectedCard, boardKey) : ''}
+             </div>`
+          : boardView.totalCardCount === 0
+            ? `<div class="empty-state">
+                 <p class="empty-state-title">Dieses Board ist leer</p>
+                 <p class="empty-state-text">Für dieses Board sind im aktuellen Import keine Werkstattfälle vorhanden.</p>
+               </div>`
+            : `<div class="empty-state">
+                 <p class="empty-state-title">Keine Treffer</p>
+                 <p class="empty-state-text">Es gibt Karten in diesem Board, aber keine passt zu den gesetzten Filtern.</p>
+               </div>`
+        }
+      </div>
+    </main>`;
+}
+
+function renderScreenHeader() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  return `
+    <section class="screen-header">
+      <div class="panel">
+        <div class="flex items-start justify-between gap-4">
+          <p class="header-eyebrow">Werkstatt Board</p>
+          <div class="header-actions">
+            <button class="btn btn-outline btn-sm" data-action="goto-admin">Verwaltung</button>
+            <button class="theme-toggle" data-action="toggle-theme" title="Farbschema wechseln">${isDark ? '☀️' : '🌙'}</button>
+          </div>
+        </div>
+        <h1 class="header-title">Werkstatt-Übersicht</h1>
+        <p class="header-sub">Aktuelle Werkstattfälle aus dem letzten Import, automatisch nach Board und Spalte sortiert.</p>
+      </div>
+      ${renderImportForm()}
+    </section>`;
+}
+
+function renderImportForm() {
+  const { importState } = APP;
+  return `
+    <div class="panel-sm import-form">
+      <p class="header-eyebrow">Import</p>
+      <h2 class="font-semibold text-strong" style="margin-top:4px">CSV-Datei laden</h2>
+      <input type="file" id="csv-file-input" accept=".csv,text/csv" multiple>
+      <p class="text-xs text-muted">Mehrere Dateien möglich. Alle Dateien werden zu einem Gesamtabzug zusammengeführt und ersetzen den bisherigen Stand vollständig.</p>
+      ${importState.status === 'success' ? `
+        <div class="import-result-ok">
+          <p class="import-result-title">Import abgeschlossen</p>
+          <p class="import-result-sub">${esc(String(importState.result.normalizedRowCount))} Karten importiert — ${esc(importState.result.sourceFileName)}</p>
+        </div>` : ''}
+      ${importState.status === 'error' ? `
+        <div class="import-result-err">
+          <p class="import-result-title">Import fehlgeschlagen</p>
+          <p class="import-result-sub">${esc(importState.message)}</p>
+        </div>` : ''}
+      <button class="btn btn-primary" data-action="run-import"${importState.status === 'loading' ? ' disabled' : ''}>
+        ${importState.status === 'loading' ? '<span class="spinner"></span> Importiere…' : 'Import starten'}
+      </button>
+    </div>`;
+}
+
+function renderBoardSelector(summaries, selectedKey) {
+  return `
+    <div class="board-selector">
+      <div class="board-selector-inner">
+        ${summaries.map(b => `
+          <button class="board-btn${b.key === selectedKey ? ' active' : ''}" data-action="select-board" data-board-key="${esc(b.key)}">
+            <span>${esc(b.name)}</span>
+            <span class="board-btn-count">${renderNum(b.cardCount)}</span>
+            ${b.isFallback ? '<span style="font-size:10px;opacity:.7;border:1px solid currentColor;border-radius:999px;padding:1px 6px">Fallback</span>' : ''}
+          </button>`).join('')}
+      </div>
+    </div>`;
+}
+
+function renderFilterBar(boardKey) {
+  const f = APP.filters;
+  const hasFilter = f.search || f.meldungsNo || f.stammPartNo || f.serialNo || f.kundenname;
+  return `
+    <div class="filter-bar">
+      <div class="filter-grid">
+        ${renderFilterField('Suche', 'search', 'Meldung, Part, Seriennr., Kunde …', f.search)}
+        ${renderFilterField('Meldungsnummer', 'meldungsNo', 'z. B. 4711', f.meldungsNo)}
+        ${renderFilterField('Part Number', 'stammPartNo', 'z. B. 33322010', f.stammPartNo)}
+        ${renderFilterField('Seriennummer', 'serialNo', 'z. B. SN-0001', f.serialNo)}
+        ${renderFilterField('Kunde', 'kundenname', 'z. B. Mustermann GmbH', f.kundenname)}
+      </div>
+      <div class="filter-actions">
+        <button class="btn btn-primary" data-action="apply-filters">Filtern</button>
+        ${hasFilter ? `<button class="btn btn-outline" data-action="reset-filters">Filter zurücksetzen</button>` : ''}
+      </div>
+    </div>`;
+}
+
+function renderFilterField(label, name, placeholder, value) {
+  return `
+    <label class="filter-label">
+      <span class="filter-label-text">${esc(label)}</span>
+      <input class="input" type="text" data-filter="${esc(name)}" placeholder="${esc(placeholder)}" value="${esc(value ?? '')}">
+    </label>`;
+}
+
+function renderBoardColumns(boardView, selectedCard) {
+  return `
+    <div class="board-scroll">
+      <div class="board-columns">
+        ${boardView.columns.map(col => renderColumn(col, boardView.key, selectedCard)).join('')}
+      </div>
+    </div>`;
+}
+
+function renderColumn(col, boardKey, selectedCard) {
+  return `
+    <div class="column" id="col-${esc(col.id)}" data-column-id="${esc(col.id)}" data-column-key="${esc(col.key)}"
+         ondragover="handleDragOver(event)" ondrop="handleDrop(event)" ondragleave="handleDragLeave(event)">
+      <header class="column-header">
+        <div class="column-header-row">
+          <div>
+            <p class="column-name">${esc(col.name)}</p>
+            <p class="column-count">${renderNum(col.cards.length)} ${col.cards.length === 1 ? 'Karte' : 'Karten'}</p>
+          </div>
+          ${col.isFallback ? '<span class="badge badge-warn">Unklar</span>' : ''}
+        </div>
+      </header>
+      <div class="column-body" data-col-scroll="${esc(col.id)}">
+        <div class="column-cards">
+          ${col.cards.length === 0
+            ? `<div class="column-empty">Keine Karten</div>`
+            : col.cards.map(card => renderKCard(card, boardKey, selectedCard)).join('')}
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderKCard(card, boardKey, selectedCard) {
+  const isSelected = selectedCard && selectedCard.meldungsNo === card.meldungsNo;
+  const overdue = isOverdue(card.eckende);
+  let cls = 'kcard';
+  if (isSelected) cls += ' selected';
+  if (overdue) cls += ' overdue';
+
+  const sn = card.stammSerialNo ?? card.serialNo;
+
+  return `
+    <div class="${cls}" draggable="true" data-card-id="${esc(card.id)}" data-meldungs-no="${esc(card.meldungsNo)}"
+         data-action="select-card"
+         ondragstart="handleDragStart(event)">
+      <div class="kcard-header">
+        <p class="kcard-meldung">${esc(card.meldungsNo)}</p>
+      </div>
+      <dl class="kcard-body">
+        ${card.auftragsNo ? `<dt class="kcard-label">Auftrag</dt><dd class="kcard-value">${esc(card.auftragsNo)}</dd>` : ''}
+        ${card.stammPartNo ? `<dt class="kcard-label">Part</dt><dd class="kcard-value">${esc(card.stammPartNo)}</dd>` : ''}
+        ${sn ? `<dt class="kcard-label">Serial</dt><dd class="kcard-value">${esc(sn)}</dd>` : ''}
+        ${card.eckende ? `<dt class="kcard-label">Eckende</dt><dd class="kcard-value">${esc(formatDate(card.eckende) ?? '')}</dd>` : ''}
+        ${card.kundenname ? `<dt class="kcard-label">Kunde</dt><dd class="kcard-value">${esc(card.kundenname)}</dd>` : ''}
+      </dl>
+      ${card.derivationWarning ? `<div class="kcard-warn">⚠ ${esc(card.derivationWarning)}</div>` : ''}
+    </div>`;
+}
+
+function renderDetailPanel(cardDetail, boardKey) {
+  const { isCurrentCard, meldungsNo, auftragsNo, stammPartNo, currentVorgangsNo,
+          currentActivityAt, derivationWarning, board, column, eckende,
+          stammSerialNo, serialNo, kundenname } = cardDetail;
+  const overdue = isOverdue(eckende);
+
+  return `
+    <aside class="detail-panel" id="detail-panel">
+      <div class="detail-header">
+        <div>
+          <p class="header-eyebrow">Detailansicht</p>
+          <h2 class="detail-meldung">${esc(meldungsNo)}</h2>
+          <p class="detail-location">${board ? `${esc(column?.name ?? '')} im Board ${esc(board.name)}` : 'Nicht zugeordnet'}</p>
+        </div>
+        <button class="btn btn-outline btn-sm" data-action="close-detail">Schließen</button>
+      </div>
+
+      <div class="detail-grid">
+        ${renderInfoCard('Auftrag', auftragsNo)}
+        ${renderInfoCard('Part Number', stammPartNo)}
+        ${renderInfoCard('Seriennummer', cardDetail.stammSerialNo ?? cardDetail.serialNo)}
+        ${renderInfoCard('Aktueller Vorgang', currentVorgangsNo)}
+        ${renderInfoCard('Letzte Aktivität', formatDateTime(currentActivityAt))}
+        ${renderInfoCard(overdue ? 'Eckende — überfällig' : 'Eckende', formatDate(eckende), overdue)}
+        ${cardDetail.kundenname ? renderInfoCard('Kunde', cardDetail.kundenname) : ''}
+        ${cardDetail.importRun ? renderInfoCard('Import', cardDetail.importRun.sourceFileName) : ''}
+      </div>
+
+      ${!isCurrentCard ? `
+        <div class="detail-warn">
+          Diese Meldung ist historisch bekannt, liegt aber nicht mehr im aktuellen Kartenbestand.
+        </div>` : ''}
+
+      ${derivationWarning ? `
+        <div class="detail-warn">
+          <p class="font-semibold">Unklarheit im aktuellen Kartenstand</p>
+          <p class="mt-1">${esc(derivationWarning)}</p>
+        </div>` : ''}
+
+      <section class="detail-section">
+        <h3 class="detail-section-title">Vorgangshistorie</h3>
+        <p class="detail-section-sub">Alle bekannten Vorgangszeilen dieser Meldung, nach Zeit sortiert.</p>
+        <div class="detail-items">
+          ${cardDetail.processHistory.length === 0
+            ? '<p class="text-sm text-muted">Keine historischen Zeilen vorhanden.</p>'
+            : cardDetail.processHistory.map(item => renderProcessHistoryItem(item)).join('')}
+        </div>
+      </section>
+    </aside>`;
+}
+
+function renderInfoCard(label, value, overdue = false) {
+  return `
+    <div class="detail-infocard${overdue ? ' overdue' : ''}">
+      <p class="detail-infocard-label">${esc(label)}</p>
+      <p class="detail-infocard-value">${esc(value ?? 'Nicht vorhanden')}</p>
+    </div>`;
+}
+
+function renderProcessHistoryItem(item) {
+  const timeLabel = formatDateTime(item.activityAt);
+  const runLabel = item.importRun
+    ? `${formatDateTime(item.importRun.startedAt)} — Zeile ${renderNum(item.rowNumber)}`
+    : `Zeile ${renderNum(item.rowNumber)}`;
+
+  return `
+    <article class="detail-item">
+      <div class="detail-item-head">
+        <div>
+          <p class="detail-item-title">Vorgang ${esc(item.vorgangsNo)}</p>
+          <p class="detail-item-sub">${esc(item.langtextVorg ?? 'Kein Langtext vorhanden')}</p>
+        </div>
+        <span class="detail-item-time">${esc(timeLabel)}</span>
+      </div>
+      <dl class="detail-dl">
+        ${renderDlRow('Arbeitsplatz', item.arbeitsplatzVorg)}
+        ${renderDlRow('Import', runLabel)}
+        ${renderDlRow('Start', formatDateTime(item.istStartVorg))}
+        ${renderDlRow('Ende', formatDateTime(item.istEndeVorg))}
+        ${renderDlRow('Serial', item.stammSerialNo ?? item.serialNo)}
+      </dl>
+      ${(item.normalizationIssues.length > 0 || item.rowIssues.length > 0) ? `
+        <div class="detail-issue-box">
+          <p class="font-semibold">Hinweise</p>
+          ${item.normalizationIssues.length > 0 ? `<p class="mt-1">Normalisierung: ${esc(item.normalizationIssues.join('; '))}</p>` : ''}
+          ${item.rowIssues.length > 0 ? `<p class="mt-1">Rohzeile: ${esc(item.rowIssues.join('; '))}</p>` : ''}
+        </div>` : ''}
+    </article>`;
+}
+
+function renderDlRow(label, value) {
+  return `
+    <div>
+      <dt class="detail-dt">${esc(label)}</dt>
+      <dd class="detail-dd">${esc(value ?? 'Nicht vorhanden')}</dd>
+    </div>`;
+}
+
+/* ============================================================
+   ADMIN VIEW RENDER
+   ============================================================ */
+function renderAdminView() {
+  const boards = [...STATE.boards].sort((a, b) => a.sortOrder - b.sortOrder);
+  const selectedKey = APP.adminSelectedBoardKey ?? boards[0]?.key ?? null;
+  const selectedBoard = boards.find(b => b.key === selectedKey) ?? null;
+
+  return `
+    <div class="admin-page">
+      <div class="admin-inner">
+        <header class="admin-header">
+          <div>
+            <p class="header-eyebrow">Administration</p>
+            <h1 style="margin-top:8px;font-size:22px;font-weight:600;color:var(--text-strong)">Board-Verwaltung</h1>
+            <p class="text-sm text-soft mt-1">Spalten und Vorgangsnummern pro Board verwalten</p>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn btn-outline btn-sm" data-action="goto-board">← Zurück zum Board</button>
+          </div>
+        </header>
+
+        ${renderAdminImportHistory()}
+
+        ${boards.length === 0
+          ? `<div class="empty-state"><p class="empty-state-title">Keine Boards vorhanden.</p></div>`
+          : `
+            ${renderAdminBoardTabs(boards, selectedKey)}
+            ${renderAdminCreateBoardForm()}
+            ${selectedBoard ? renderAdminColumnManager(selectedBoard, boards.length) : ''}
+          `}
+      </div>
+    </div>`;
+}
+
+function renderAdminBoardTabs(boards, selectedKey) {
+  const sorted = [...boards].sort((a, b) => a.sortOrder - b.sortOrder);
+  return `
+    <div>
+      <div class="admin-board-tabs">
+        ${sorted.map((b, idx) => {
+          const isActive = b.key === selectedKey;
+          return `
+            <div class="admin-board-tab${isActive ? ' active' : ''}">
+              <button class="admin-board-tab-btn" data-action="admin-select-board" data-board-key="${esc(b.key)}">
+                ${esc(b.name)}
+                ${b.isFallback ? '<span style="font-size:11px;opacity:.7"> (Fallback)</span>' : ''}
+              </button>
+              <div class="admin-board-tab-arrows">
+                <button data-action="admin-move-board" data-board-key="${esc(b.key)}" data-dir="-1" ${idx === 0 ? 'disabled' : ''} title="Board nach links">←</button>
+                <button data-action="admin-move-board" data-board-key="${esc(b.key)}" data-dir="1" ${idx === sorted.length - 1 ? 'disabled' : ''} title="Board nach rechts">→</button>
+              </div>
+            </div>`;
+        }).join('')}
+        <button class="btn btn-outline btn-sm" data-action="admin-toggle-create-board">+ Neues Board</button>
+      </div>
+    </div>`;
+}
+
+function renderAdminCreateBoardForm() {
+  if (!APP.adminShowCreateBoard) return '';
+  return `
+    <div class="board-create-form">
+      <p class="board-create-form-title">Neues Board anlegen</p>
+      <div class="form-field" style="max-width:320px">
+        <label class="form-label">Board-Name</label>
+        <input class="input" type="text" id="new-board-name" placeholder="z. B. Arbeitsplatz XY" />
+      </div>
+      <div class="form-field mt-3" style="max-width:320px">
+        <label class="form-label">Arbeitsplatz (für automatische Zuweisung)</label>
+        <input class="input" type="text" id="new-board-arbeitsplatz" placeholder="z. B. 33322099" />
+      </div>
+      <div class="form-row mt-3">
+        <button class="btn btn-primary" data-action="admin-create-board">Anlegen</button>
+        <button class="btn btn-outline" data-action="admin-toggle-create-board">Abbrechen</button>
+      </div>
+    </div>`;
+}
+
+function renderAdminColumnManager(board, boardCount) {
+  const sorted = [...board.columns].sort((a, b) => a.sortOrder - b.sortOrder);
+  const editId = APP.adminEditingColumnId;
+
+  const cardCountByColumn = {};
+  for (const col of board.columns) {
+    cardCountByColumn[col.key] = STATE.currentCards.filter(c => c.columnKey === col.key && c.boardKey === board.key).length;
+  }
+
+  return `
+    <section class="admin-column-section">
+      <div class="admin-column-section-head">
+        ${APP.adminRenamingBoard
+          ? `<div class="rename-form">
+               <input class="rename-input" id="board-rename-input" type="text" value="${esc(APP.adminBoardNameInput)}" />
+               <button class="btn btn-primary btn-sm" data-action="admin-save-board-name">Speichern</button>
+               <button class="btn btn-outline btn-sm" data-action="admin-cancel-rename">Abbrechen</button>
+             </div>`
+          : `<div class="flex items-center gap-2">
+               <h2 style="font-size:15px;font-weight:600;color:var(--text-strong)">${esc(board.name)}</h2>
+               <button class="btn btn-outline btn-xs" data-action="admin-start-rename" data-board-key="${esc(board.key)}">Umbenennen</button>
+               <button class="btn btn-danger btn-xs" data-action="admin-delete-board" data-board-key="${esc(board.key)}"
+                 ${board.isFallback || boardCount <= 1 ? 'disabled' : ''}
+                 title="${board.isFallback ? 'Fallback-Board kann nicht gelöscht werden' : boardCount <= 1 ? 'Mindestens ein Board muss erhalten bleiben' : 'Board löschen'}">
+                 Löschen
+               </button>
+             </div>`}
+        <button class="btn btn-primary btn-sm" data-action="admin-toggle-create-col" data-board-key="${esc(board.key)}">+ Neue Spalte</button>
+      </div>
+
+      ${APP.adminShowCreateForm ? renderCreateColumnForm(board.key) : ''}
+
+      ${sorted.length === 0 && !APP.adminShowCreateForm
+        ? `<div class="empty-state"><p class="empty-state-title">Noch keine Spalten angelegt.</p></div>`
+        : `<div style="display:flex;flex-direction:column;gap:12px">
+             ${sorted.map((col, idx) =>
+               editId === col.id
+                 ? renderEditColumnForm(col)
+                 : renderAdminColCard(col, cardCountByColumn[col.key] ?? 0, idx === 0, idx === sorted.length - 1)
+             ).join('')}
+           </div>`}
+    </section>`;
+}
+
+function renderAdminColCard(col, cardCount, isFirst, isLast) {
+  const canDelete = cardCount === 0;
+  return `
+    <div class="admin-col-card">
+      <div class="admin-col-head">
+        <div style="flex:1;min-width:0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="admin-col-name">${esc(col.name)}</span>
+            ${col.isFallback ? '<span class="badge badge-warn">Fallback</span>' : ''}
+            <span class="text-sm text-muted">${renderNum(cardCount)} Karte${cardCount !== 1 ? 'n' : ''}</span>
+          </div>
+          <div class="admin-col-rules">
+            ${col.rules.length === 0
+              ? '<span class="text-sm text-muted">Keine Vorgangsnummern zugeordnet</span>'
+              : col.rules.map(r => `<span class="admin-rule-chip">${esc(r.vorgangsNo)}</span>`).join('')}
+          </div>
+        </div>
+        <div class="admin-col-actions">
+          <button class="btn btn-outline btn-xs" data-action="admin-move-col" data-col-id="${esc(col.id)}" data-dir="-1" ${isFirst ? 'disabled' : ''} title="Nach oben">↑</button>
+          <button class="btn btn-outline btn-xs" data-action="admin-move-col" data-col-id="${esc(col.id)}" data-dir="1" ${isLast ? 'disabled' : ''} title="Nach unten">↓</button>
+          <button class="btn btn-outline btn-xs" data-action="admin-edit-col" data-col-id="${esc(col.id)}">Bearbeiten</button>
+          <button class="btn btn-danger btn-xs" data-action="admin-delete-col" data-col-id="${esc(col.id)}"
+            ${!canDelete ? 'disabled' : ''} title="${!canDelete ? `Spalte hat ${cardCount} aktive Karte(n)` : 'Spalte löschen'}">
+            Löschen
+          </button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderCreateColumnForm(boardKey) {
+  return `
+    <div class="admin-col-card editing">
+      <p style="font-size:13px;font-weight:600;margin-bottom:16px;color:var(--text-strong)">Neue Spalte anlegen</p>
+      <div class="form-field" style="max-width:320px">
+        <label class="form-label">Spaltenname</label>
+        <input class="input" type="text" id="new-col-name" placeholder="z. B. Eingang" />
+      </div>
+      <label class="form-check mt-3">
+        <input type="checkbox" id="new-col-fallback" />
+        Als Fallback-Spalte markieren
+      </label>
+      <div class="form-row mt-3">
+        <button class="btn btn-primary" data-action="admin-create-col" data-board-key="${esc(boardKey)}">Anlegen</button>
+        <button class="btn btn-outline" data-action="admin-cancel-create-col">Abbrechen</button>
+      </div>
+    </div>`;
+}
+
+function renderEditColumnForm(col) {
+  return `
+    <div class="admin-col-card editing" data-col-id="${esc(col.id)}">
+      <p style="font-size:13px;font-weight:600;margin-bottom:16px;color:var(--text-strong)">Spalte bearbeiten</p>
+      <div class="form-field" style="max-width:320px">
+        <label class="form-label">Spaltenname</label>
+        <input class="input" type="text" id="edit-col-name" value="${esc(col.name)}" />
+      </div>
+      <label class="form-check mt-3">
+        <input type="checkbox" id="edit-col-fallback" ${col.isFallback ? 'checked' : ''} />
+        Als Fallback-Spalte markieren
+      </label>
+      <div class="form-row mt-3">
+        <button class="btn btn-primary" data-action="admin-save-col" data-col-id="${esc(col.id)}">Speichern</button>
+        <button class="btn btn-outline" data-action="admin-cancel-edit-col">Abbrechen</button>
+      </div>
+
+      <div style="margin-top:20px;border-top:1px solid var(--border-soft);padding-top:20px">
+        <p style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:12px">Vorgangsnummern</p>
+        <div class="admin-col-rules" style="margin-bottom:12px">
+          ${col.rules.length === 0
+            ? '<span class="text-sm text-muted">Keine Nummern zugeordnet</span>'
+            : col.rules.map(r => `
+                <span class="admin-rule-chip">
+                  ${esc(r.vorgangsNo)}
+                  <button class="admin-rule-remove" data-action="admin-remove-rule" data-rule-id="${esc(r.id)}" data-col-id="${esc(col.id)}" title="Entfernen">×</button>
+                </span>`).join('')}
+        </div>
+        <div class="form-row">
+          <input class="input" type="text" id="new-rule-vorgangsno" placeholder="z. B. 0100" pattern="\\d+" style="width:140px;font-family:monospace" />
+          <button class="btn btn-outline btn-sm" data-action="admin-add-rule" data-col-id="${esc(col.id)}">+ Hinzufügen</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderAdminImportHistory() {
+  const runs = STATE.importRuns.slice(0, 10);
+  if (runs.length === 0) return '';
+  return `
+    <div class="admin-import-section">
+      <p style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--text-strong)">Import-Verlauf</p>
+      ${runs.map(run => `
+        <div class="import-run-row">
+          <div>
+            <span class="font-medium text-strong">${esc(run.sourceFileName)}</span>
+            <span class="text-muted" style="margin-left:8px">${esc(formatDateTime(run.startedAt))}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="${run.status === 'COMPLETED' ? 'status-ok' : run.status === 'FAILED' ? 'status-err' : 'status-running'}">${esc(run.status)}</span>
+            <span class="text-muted">${renderNum(run.rowCount ?? 0)} Zeilen</span>
+          </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+/* ============================================================
+   MAIN RENDER
+   ============================================================ */
+function render() {
+  const scrollPos = saveScrollPositions();
+  const root = document.getElementById('root');
+  const prevFocusId = document.activeElement?.id;
+  const prevFocusValue = document.activeElement?.value;
+
+  root.innerHTML = APP.view === 'board' ? renderBoardView() : renderAdminView();
+
+  restoreScrollPositions(scrollPos);
+
+  // Restore focus for filter inputs
+  if (prevFocusId) {
+    const el = document.getElementById(prevFocusId);
+    if (el && el.tagName === 'INPUT') {
+      el.focus();
+      if (prevFocusValue !== undefined) {
+        el.value = prevFocusValue;
+        // Place cursor at end
+        el.setSelectionRange(el.value.length, el.value.length);
+      }
+    }
+  }
+}
+
+/* ============================================================
+   DRAG & DROP
+   ============================================================ */
+let dragCardId = null;
+
+function handleDragStart(event) {
+  dragCardId = event.currentTarget.dataset.cardId;
+  event.currentTarget.classList.add('dragging');
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', dragCardId);
+}
+
+function handleDragOver(event) {
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+  const col = event.currentTarget.closest('[data-column-id]');
+  if (col) col.classList.add('drag-over');
+}
+
+function handleDragLeave(event) {
+  const col = event.currentTarget.closest('[data-column-id]');
+  if (col && !col.contains(event.relatedTarget)) {
+    col.classList.remove('drag-over');
+  }
+}
+
+function handleDrop(event) {
+  event.preventDefault();
+  const col = event.currentTarget.closest('[data-column-id]');
+  if (col) col.classList.remove('drag-over');
+
+  const cardId = dragCardId;
+  if (!cardId) return;
+
+  const colId = col?.dataset.columnId;
+  const colKey = col?.dataset.columnKey;
+  if (!colId || !colKey) return;
+
+  const card = STATE.currentCards.find(c => c.id === cardId);
+  if (!card) return;
+
+  if (card.columnKey === colKey) return; // No change
+
+  // Find the board and column
+  const board = STATE.boards.find(b => b.id === card.boardId);
+  if (!board) return;
+
+  // Check if target column is in same or different board
+  let targetBoardId = card.boardId;
+  let targetBoardKey = card.boardKey;
+
+  // Find which board owns this column
+  for (const b of STATE.boards) {
+    if (b.columns.some(c => c.id === colId)) {
+      targetBoardId = b.id;
+      targetBoardKey = b.key;
+      break;
+    }
+  }
+
+  card.columnId = colId;
+  card.columnKey = colKey;
+  card.boardId = targetBoardId;
+  card.boardKey = targetBoardKey;
+  card.manualColumnOverride = true;
+
+  dragCardId = null;
+  saveState();
+  render();
+}
+
+// Clear dragging class on dragend
+document.addEventListener('dragend', (event) => {
+  event.target.classList.remove('dragging');
+  document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+  dragCardId = null;
+});
+
+/* ============================================================
+   EVENT HANDLERS
+   ============================================================ */
+document.addEventListener('click', async (event) => {
+  const el = event.target.closest('[data-action]');
+  if (!el) return;
+
+  const action = el.dataset.action;
+
+  switch (action) {
+    case 'toggle-theme': {
+      const html = document.documentElement;
+      const isDark = html.getAttribute('data-theme') === 'dark';
+      html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+      render();
+      break;
+    }
+
+    case 'goto-admin': {
+      APP.view = 'admin';
+      APP.adminSelectedBoardKey = STATE.boards[0]?.key ?? null;
+      render();
+      break;
+    }
+
+    case 'goto-board': {
+      APP.view = 'board';
+      render();
+      break;
+    }
+
+    case 'select-board': {
+      APP.selectedBoardKey = el.dataset.boardKey;
+      APP.selectedCardMeldungsNo = null;
+      render();
+      break;
+    }
+
+    case 'select-card': {
+      const mno = el.closest('[data-meldungs-no]')?.dataset.meldungsNo;
+      if (mno) {
+        APP.selectedCardMeldungsNo = APP.selectedCardMeldungsNo === mno ? null : mno;
+        render();
+      }
+      break;
+    }
+
+    case 'close-detail': {
+      APP.selectedCardMeldungsNo = null;
+      render();
+      break;
+    }
+
+    case 'apply-filters': {
+      // Collect filter values from DOM
+      const f = {};
+      document.querySelectorAll('[data-filter]').forEach(input => {
+        f[input.dataset.filter] = input.value.trim();
+      });
+      APP.filters = { search: f.search || '', meldungsNo: f.meldungsNo || '', stammPartNo: f.stammPartNo || '', serialNo: f.serialNo || '', kundenname: f.kundenname || '' };
+      render();
+      break;
+    }
+
+    case 'reset-filters': {
+      APP.filters = { search: '', meldungsNo: '', stammPartNo: '', serialNo: '', kundenname: '' };
+      render();
+      break;
+    }
+
+    case 'run-import': {
+      const fileInput = document.getElementById('csv-file-input');
+      if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        APP.importState = { status: 'error', message: 'Bitte eine CSV-Datei auswählen.', result: null };
+        render();
+        return;
+      }
+      APP.importState = { status: 'loading', message: null, result: null };
+      render();
+      try {
+        const result = await runImport(fileInput.files);
+        APP.importState = { status: 'success', message: null, result };
+        // Reset selected card if not found in new data
+        if (APP.selectedCardMeldungsNo && !STATE.currentCards.find(c => c.meldungsNo === APP.selectedCardMeldungsNo)) {
+          APP.selectedCardMeldungsNo = null;
+        }
+      } catch (e) {
+        APP.importState = { status: 'error', message: e.message, result: null };
+      }
+      render();
+      break;
+    }
+
+    // === ADMIN ACTIONS ===
+    case 'admin-select-board': {
+      APP.adminSelectedBoardKey = el.dataset.boardKey;
+      APP.adminEditingColumnId = null;
+      APP.adminShowCreateForm = false;
+      APP.adminRenamingBoard = false;
+      render();
+      break;
+    }
+
+    case 'admin-move-board': {
+      const key = el.dataset.boardKey;
+      const dir = parseInt(el.dataset.dir);
+      const sorted = [...STATE.boards].sort((a, b) => a.sortOrder - b.sortOrder);
+      const idx = sorted.findIndex(b => b.key === key);
+      const nextIdx = idx + dir;
+      if (idx === -1 || nextIdx < 0 || nextIdx >= sorted.length) return;
+      const next = [...sorted];
+      [next[idx], next[nextIdx]] = [next[nextIdx], next[idx]];
+      next.forEach((b, i) => { b.sortOrder = (i + 1) * 10; });
+      STATE.boards = STATE.boards.map(b => {
+        const updated = next.find(n => n.id === b.id);
+        return updated ? { ...b, sortOrder: updated.sortOrder } : b;
+      });
+      saveState();
+      render();
+      break;
+    }
+
+    case 'admin-toggle-create-board': {
+      APP.adminShowCreateBoard = !APP.adminShowCreateBoard;
+      render();
+      break;
+    }
+
+    case 'admin-create-board': {
+      const nameEl = document.getElementById('new-board-name');
+      const apEl = document.getElementById('new-board-arbeitsplatz');
+      const name = nameEl?.value.trim();
+      const ap = apEl?.value.trim();
+      if (!name) { alert('Bitte einen Board-Namen eingeben.'); return; }
+      const newId = uid();
+      const newKey = slug(name) + '-' + uid().slice(0, 6);
+      const maxOrder = Math.max(...STATE.boards.map(b => b.sortOrder), 0);
+      const newBoard = {
+        id: newId,
+        key: newKey,
+        name,
+        sortOrder: maxOrder + 10,
+        isFallback: false,
+        boardRules: ap ? [{ id: uid(), matchType: 'EXACT', matchValue: ap, priority: 1 }] : [],
+        columns: buildColumnsForBoard(newId),
+      };
+      STATE.boards.push(newBoard);
+      APP.adminSelectedBoardKey = newKey;
+      APP.adminShowCreateBoard = false;
+      saveState();
+      render();
+      break;
+    }
+
+    case 'admin-start-rename': {
+      const board = STATE.boards.find(b => b.key === el.dataset.boardKey);
+      if (board) {
+        APP.adminRenamingBoard = true;
+        APP.adminBoardNameInput = board.name;
+        render();
+        document.getElementById('board-rename-input')?.focus();
+      }
+      break;
+    }
+
+    case 'admin-save-board-name': {
+      const input = document.getElementById('board-rename-input');
+      const newName = input?.value.trim();
+      if (!newName) { alert('Name darf nicht leer sein.'); return; }
+      const board = STATE.boards.find(b => b.key === APP.adminSelectedBoardKey);
+      if (board) board.name = newName;
+      APP.adminRenamingBoard = false;
+      saveState();
+      render();
+      break;
+    }
+
+    case 'admin-cancel-rename': {
+      APP.adminRenamingBoard = false;
+      render();
+      break;
+    }
+
+    case 'admin-delete-board': {
+      const key = el.dataset.boardKey;
+      const board = STATE.boards.find(b => b.key === key);
+      if (!board || board.isFallback || STATE.boards.length <= 1) return;
+      if (!confirm(`Board "${board.name}" wirklich löschen? Alle Spalten und Regeln dieses Boards werden entfernt.`)) return;
+      STATE.boards = STATE.boards.filter(b => b.key !== key);
+      // Move orphaned cards to fallback
+      const fallback = STATE.boards.find(b => b.isFallback);
+      if (fallback) {
+        const fallbackCol = fallback.columns.find(c => c.isFallback) ?? fallback.columns[0];
+        STATE.currentCards.forEach(c => {
+          if (c.boardKey === key) {
+            c.boardKey = fallback.key;
+            c.boardId = fallback.id;
+            if (fallbackCol) { c.columnKey = fallbackCol.key; c.columnId = fallbackCol.id; }
+          }
+        });
+      }
+      APP.adminSelectedBoardKey = STATE.boards[0]?.key ?? null;
+      saveState();
+      render();
+      break;
+    }
+
+    case 'admin-toggle-create-col': {
+      APP.adminShowCreateForm = !APP.adminShowCreateForm;
+      APP.adminEditingColumnId = null;
+      render();
+      break;
+    }
+
+    case 'admin-cancel-create-col': {
+      APP.adminShowCreateForm = false;
+      render();
+      break;
+    }
+
+    case 'admin-create-col': {
+      const boardKey = el.dataset.boardKey;
+      const nameEl = document.getElementById('new-col-name');
+      const fallbackEl = document.getElementById('new-col-fallback');
+      const name = nameEl?.value.trim();
+      const isFallback = fallbackEl?.checked ?? false;
+      if (!name) { alert('Bitte einen Spaltennamen eingeben.'); return; }
+      const board = STATE.boards.find(b => b.key === boardKey);
+      if (!board) return;
+      const maxOrder = Math.max(...board.columns.map(c => c.sortOrder), 0);
+      board.columns.push({
+        id: uid(),
+        boardId: board.id,
+        key: slug(name) + '-' + uid().slice(0, 6),
+        name,
+        sortOrder: maxOrder + 10,
+        isFallback,
+        rules: [],
+      });
+      APP.adminShowCreateForm = false;
+      saveState();
+      render();
+      break;
+    }
+
+    case 'admin-edit-col': {
+      APP.adminEditingColumnId = el.dataset.colId;
+      APP.adminShowCreateForm = false;
+      render();
+      break;
+    }
+
+    case 'admin-cancel-edit-col': {
+      APP.adminEditingColumnId = null;
+      render();
+      break;
+    }
+
+    case 'admin-save-col': {
+      const colId = el.dataset.colId;
+      const nameEl = document.getElementById('edit-col-name');
+      const fallbackEl = document.getElementById('edit-col-fallback');
+      const name = nameEl?.value.trim();
+      if (!name) { alert('Name darf nicht leer sein.'); return; }
+      const isFallback = fallbackEl?.checked ?? false;
+      for (const board of STATE.boards) {
+        const col = board.columns.find(c => c.id === colId);
+        if (col) { col.name = name; col.isFallback = isFallback; break; }
+      }
+      APP.adminEditingColumnId = null;
+      saveState();
+      render();
+      break;
+    }
+
+    case 'admin-delete-col': {
+      const colId = el.dataset.colId;
+      const cardCount = STATE.currentCards.filter(c => c.columnId === colId).length;
+      if (cardCount > 0) { alert(`Spalte hat ${cardCount} aktive Karte(n) und kann nicht gelöscht werden.`); return; }
+      for (const board of STATE.boards) {
+        const idx = board.columns.findIndex(c => c.id === colId);
+        if (idx !== -1) { board.columns.splice(idx, 1); break; }
+      }
+      saveState();
+      render();
+      break;
+    }
+
+    case 'admin-move-col': {
+      const colId = el.dataset.colId;
+      const dir = parseInt(el.dataset.dir);
+      for (const board of STATE.boards) {
+        const sorted = [...board.columns].sort((a, b) => a.sortOrder - b.sortOrder);
+        const idx = sorted.findIndex(c => c.id === colId);
+        if (idx === -1) continue;
+        const nextIdx = idx + dir;
+        if (nextIdx < 0 || nextIdx >= sorted.length) break;
+        [sorted[idx], sorted[nextIdx]] = [sorted[nextIdx], sorted[idx]];
+        sorted.forEach((c, i) => { c.sortOrder = (i + 1) * 10; });
+        board.columns = board.columns.map(c => {
+          const updated = sorted.find(s => s.id === c.id);
+          return updated ? { ...c, sortOrder: updated.sortOrder } : c;
+        });
+        break;
+      }
+      saveState();
+      render();
+      break;
+    }
+
+    case 'admin-add-rule': {
+      const colId = el.dataset.colId;
+      const input = document.getElementById('new-rule-vorgangsno');
+      const vno = input?.value.trim();
+      if (!vno) return;
+      if (!/^\d+$/.test(vno)) { alert('Vorgangsnummer darf nur Ziffern enthalten.'); return; }
+      for (const board of STATE.boards) {
+        const col = board.columns.find(c => c.id === colId);
+        if (col) {
+          if (col.rules.some(r => r.vorgangsNo === vno)) { alert(`Vorgangsnummer ${vno} ist bereits zugeordnet.`); return; }
+          col.rules.push({ id: uid(), vorgangsNo: vno });
+          break;
+        }
+      }
+      saveState();
+      render();
+      break;
+    }
+
+    case 'admin-remove-rule': {
+      const ruleId = el.dataset.ruleId;
+      const colId = el.dataset.colId;
+      for (const board of STATE.boards) {
+        const col = board.columns.find(c => c.id === colId);
+        if (col) {
+          col.rules = col.rules.filter(r => r.id !== ruleId);
+          break;
+        }
+      }
+      saveState();
+      render();
+      break;
+    }
+  }
+});
+
+// Allow pressing Enter in rename input
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    if (event.target.id === 'board-rename-input') {
+      const saveBtn = document.querySelector('[data-action="admin-save-board-name"]');
+      if (saveBtn) saveBtn.click();
+    }
+    if (event.target.id === 'new-rule-vorgangsno') {
+      const colId = event.target.closest('[data-col-id]')?.dataset.colId;
+      if (colId) {
+        const addBtn = document.querySelector(`[data-action="admin-add-rule"][data-col-id="${colId}"]`);
+        if (addBtn) addBtn.click();
+      }
+    }
+  }
+});
+
+// Live filter: collect on input event but don't re-render (re-render only on submit/button)
+// Allow typing without re-renders losing focus
+
+/* ============================================================
+   INIT
+   ============================================================ */
+render();
+</script>
+</body>
+</html>
