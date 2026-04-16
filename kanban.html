@@ -1023,14 +1023,16 @@ function deriveCurrentCard(meldungsNo, rows, boards) {
 function deriveCurrentCards(normalizedRows, boards) {
   const grouped = groupRowsByMeldungsNo(normalizedRows);
   const cards = [];
+  let failedCount = 0;
   for (const [meldungsNo, rows] of [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b, 'de'))) {
     try {
       cards.push(deriveCurrentCard(meldungsNo, rows, boards));
     } catch (e) {
       console.warn(`Fehler bei Meldung ${meldungsNo}:`, e);
+      failedCount++;
     }
   }
-  return cards;
+  return { cards, failedCount };
 }
 
 /* ============================================================
@@ -1079,7 +1081,7 @@ async function runImport(files) {
     if (!ok) return null;
   }
 
-  const newCards = deriveCurrentCards(allRows, STATE.boards);
+  const { cards: newCards, failedCount } = deriveCurrentCards(allRows, STATE.boards);
 
   const importRun = {
     id: importRunId,
@@ -1102,6 +1104,7 @@ async function runImport(files) {
     sourceFileName,
     normalizedRowCount: newCards.length,
     rejectedRowCount: allRows.length - newCards.length,
+    failedCount,
   };
 }
 
@@ -1436,6 +1439,7 @@ function renderImportForm() {
         <div class="import-result-ok">
           <p class="import-result-title">Import abgeschlossen</p>
           <p class="import-result-sub">${esc(String(importState.result.normalizedRowCount))} Karten importiert — ${esc(importState.result.sourceFileName)}</p>
+          ${importState.result.failedCount > 0 ? `<p class="import-result-sub" style="color:var(--clr-warn)">${esc(String(importState.result.failedCount))} Meldung(en) konnten nicht abgeleitet werden und wurden übersprungen.</p>` : ''}
         </div>` : ''}
       ${importState.status === 'error' ? `
         <div class="import-result-err">
