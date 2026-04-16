@@ -679,12 +679,10 @@ function createInitialState() {
     }],
   });
 
-  return { boards, currentCards: [], importRuns: [], normalizedRows: [] };
+  return { boards, currentCards: [], lastImport: null, normalizedRows: [] };
 }
 
 let STATE = loadState() || createInitialState();
-// Migrate old states that might be missing normalizedRows
-if (!STATE.normalizedRows) STATE.normalizedRows = [];
 saveState();
 
 /* ============================================================
@@ -1082,7 +1080,6 @@ async function runImport(files) {
   }
 
   const newCards = deriveCurrentCards(allRows, STATE.boards);
-  newCards.forEach(c => c.importRunId = importRunId);
 
   const importRun = {
     id: importRunId,
@@ -1094,11 +1091,9 @@ async function runImport(files) {
     normalizedRowCount: allRows.length,
   };
 
-  // Store rows for detail view (keep all import rows, tagged with importRunId)
-  const rowsWithImportId = allRows.map(r => ({ ...r, importRunId }));
-
-  STATE.importRuns = [importRun, ...STATE.importRuns];
-  STATE.normalizedRows = [...rowsWithImportId, ...STATE.normalizedRows];
+  // Bisherige Rohdaten vollständig ersetzen — kein Aufaddieren zwischen Importen
+  STATE.lastImport = importRun;
+  STATE.normalizedRows = allRows;
   STATE.currentCards = newCards;
   saveState();
 
@@ -1229,11 +1224,12 @@ function getCardDetail(meldungsNo) {
 
   const board = card ? STATE.boards.find(b => b.key === card.boardKey) : null;
   const column = board ? board.columns.find(c => c.key === card.columnKey) : null;
-  const importRun = card ? STATE.importRuns.find(r => r.id === card.importRunId) : null;
+  // Alle Zeilen stammen aus dem letzten Import — ältere Importe werden nicht mehr akkumuliert
+  const importRun = card ? STATE.lastImport : null;
 
   // Process history: all unique rows for this meldungsNo
   const processHistory = allRows.map(row => {
-    const run = STATE.importRuns.find(r => r.id === row.importRunId);
+    const run = STATE.lastImport;
     const act = selectRelevantActivity(row);
     return {
       id: row.id,
@@ -1859,22 +1855,21 @@ function renderEditColumnForm(col) {
 }
 
 function renderAdminImportHistory() {
-  const runs = STATE.importRuns.slice(0, 10);
-  if (runs.length === 0) return '';
+  const run = STATE.lastImport;
+  if (!run) return '';
   return `
     <div class="admin-import-section">
-      <p style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--text-strong)">Import-Verlauf</p>
-      ${runs.map(run => `
-        <div class="import-run-row">
-          <div>
-            <span class="font-medium text-strong">${esc(run.sourceFileName)}</span>
-            <span class="text-muted" style="margin-left:8px">${esc(formatDateTime(run.startedAt))}</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="${run.status === 'COMPLETED' ? 'status-ok' : run.status === 'FAILED' ? 'status-err' : 'status-running'}">${esc(run.status)}</span>
-            <span class="text-muted">${renderNum(run.rowCount ?? 0)} Zeilen</span>
-          </div>
-        </div>`).join('')}
+      <p style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--text-strong)">Letzter Import</p>
+      <div class="import-run-row">
+        <div>
+          <span class="font-medium text-strong">${esc(run.sourceFileName)}</span>
+          <span class="text-muted" style="margin-left:8px">${esc(formatDateTime(run.startedAt))}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="${run.status === 'COMPLETED' ? 'status-ok' : run.status === 'FAILED' ? 'status-err' : 'status-running'}">${esc(run.status)}</span>
+          <span class="text-muted">${renderNum(run.rowCount ?? 0)} Zeilen</span>
+        </div>
+      </div>
     </div>`;
 }
 
