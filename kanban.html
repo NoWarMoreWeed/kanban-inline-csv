@@ -572,7 +572,15 @@ function saveState() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
   } catch (e) {
-    alert('Fehler beim Speichern: ' + e.message);
+    const isQuota = e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014;
+    if (isQuota) {
+      alert(
+        'Der Import konnte nicht gespeichert werden: Die importierten Daten sind zu groß für den Browser-Speicher.\n\n' +
+        'Bitte importieren Sie eine kleinere Datei (weniger Zeilen).'
+      );
+    } else {
+      alert('Fehler beim Speichern: ' + e.message);
+    }
   }
 }
 
@@ -1043,6 +1051,14 @@ async function runImport(files) {
       allRows.push({ ...row.normalized, rowNumber: row.normalized.rowNumber + rowOffset });
     }
     rowOffset += totalRawRows;
+  }
+
+  if (allRows.length > 15000) {
+    const ok = confirm(
+      `Warnung: Die Datei enthält ${allRows.length} Zeilen.\n\n` +
+      'Sehr große Importe können den Browser-Speicher überschreiten. Trotzdem fortfahren?'
+    );
+    if (!ok) return null;
   }
 
   const newCards = deriveCurrentCards(allRows, STATE.boards);
@@ -2028,6 +2044,11 @@ document.addEventListener('click', async (event) => {
       render();
       try {
         const result = await runImport(fileInput.files);
+        if (result === null) {
+          APP.importState = { status: 'idle', message: null, result: null };
+          render();
+          break;
+        }
         APP.importState = { status: 'success', message: null, result };
         // Reset selected card if not found in new data
         if (APP.selectedCardMeldungsNo && !STATE.currentCards.find(c => c.meldungsNo === APP.selectedCardMeldungsNo)) {
