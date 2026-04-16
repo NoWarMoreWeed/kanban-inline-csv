@@ -1293,7 +1293,7 @@ const APP = {
   adminShowCreateForm: false,
   adminRenamingBoard: false,
   adminBoardNameInput: '',
-  adminShowCreateBoard: false,
+
   importState: { status: 'idle', message: null, result: null }, // idle | loading | success | error
   dragCardId: null,
 };
@@ -1696,7 +1696,6 @@ function renderAdminView() {
           ? `<div class="empty-state"><p class="empty-state-title">Keine Boards vorhanden.</p></div>`
           : `
             ${renderAdminBoardTabs(boards, selectedKey)}
-            ${renderAdminCreateBoardForm()}
             ${selectedBoard ? renderAdminColumnManager(selectedBoard, boards.length) : ''}
           `}
       </div>
@@ -1722,30 +1721,10 @@ function renderAdminBoardTabs(boards, selectedKey) {
               </div>
             </div>`;
         }).join('')}
-        <button class="btn btn-outline btn-sm" data-action="admin-toggle-create-board">+ Neues Board</button>
       </div>
     </div>`;
 }
 
-function renderAdminCreateBoardForm() {
-  if (!APP.adminShowCreateBoard) return '';
-  return `
-    <div class="board-create-form">
-      <p class="board-create-form-title">Neues Board anlegen</p>
-      <div class="form-field" style="max-width:320px">
-        <label class="form-label">Board-Name</label>
-        <input class="input" type="text" id="new-board-name" placeholder="z. B. Arbeitsplatz XY" />
-      </div>
-      <div class="form-field mt-3" style="max-width:320px">
-        <label class="form-label">Arbeitsplatz (für automatische Zuweisung)</label>
-        <input class="input" type="text" id="new-board-arbeitsplatz" placeholder="z. B. 33322099" />
-      </div>
-      <div class="form-row mt-3">
-        <button class="btn btn-primary" data-action="admin-create-board">Anlegen</button>
-        <button class="btn btn-outline" data-action="admin-toggle-create-board">Abbrechen</button>
-      </div>
-    </div>`;
-}
 
 function renderAdminColumnManager(board, boardCount) {
   const sorted = [...board.columns].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -2158,38 +2137,6 @@ document.addEventListener('click', async (event) => {
         const updated = next.find(n => n.id === b.id);
         return updated ? { ...b, sortOrder: updated.sortOrder } : b;
       });
-      saveState();
-      render();
-      break;
-    }
-
-    case 'admin-toggle-create-board': {
-      APP.adminShowCreateBoard = !APP.adminShowCreateBoard;
-      render();
-      break;
-    }
-
-    case 'admin-create-board': {
-      const nameEl = document.getElementById('new-board-name');
-      const apEl = document.getElementById('new-board-arbeitsplatz');
-      const name = nameEl?.value.trim();
-      const ap = apEl?.value.trim();
-      if (!name) { alert('Bitte einen Board-Namen eingeben.'); return; }
-      const newId = uid();
-      const newKey = slug(name) + '-' + uid().slice(0, 6);
-      const maxOrder = Math.max(...STATE.boards.map(b => b.sortOrder), 0);
-      const newBoard = {
-        id: newId,
-        key: newKey,
-        name,
-        sortOrder: maxOrder + 10,
-        isFallback: false,
-        boardRules: ap ? [{ id: uid(), matchType: 'EXACT', matchValue: ap, priority: 1 }] : [],
-        columns: buildColumnsForBoard(newId),
-      };
-      STATE.boards.push(newBoard);
-      APP.adminSelectedBoardKey = newKey;
-      APP.adminShowCreateBoard = false;
       saveState();
       render();
       break;
