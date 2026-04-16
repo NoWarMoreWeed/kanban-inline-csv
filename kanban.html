@@ -556,6 +556,7 @@ function isOverdue(isoStr) {
    STORAGE
    ============================================================ */
 const STORAGE_KEY = 'kanban_state';
+const UI_STATE_KEY = 'kanban_ui_state';
 
 function loadState() {
   try {
@@ -564,6 +565,29 @@ function loadState() {
     return JSON.parse(raw);
   } catch (e) {
     console.error('Fehler beim Laden des Zustands:', e);
+    return null;
+  }
+}
+
+// Speichert ausgewähltes Board, aktive Filter und Farbschema — kein kritischer Fehler wenn es scheitert
+function saveUiState() {
+  try {
+    const theme = document.documentElement.getAttribute('data-theme') || 'light';
+    localStorage.setItem(UI_STATE_KEY, JSON.stringify({
+      selectedBoardKey: APP.selectedBoardKey,
+      filters: APP.filters,
+      theme,
+    }));
+  } catch (e) {
+    // UI-Zustand konnte nicht persistiert werden — kein kritischer Fehler
+  }
+}
+
+function loadUiState() {
+  try {
+    const raw = localStorage.getItem(UI_STATE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
     return null;
   }
 }
@@ -1977,6 +2001,7 @@ document.addEventListener('click', async (event) => {
       const html = document.documentElement;
       const isDark = html.getAttribute('data-theme') === 'dark';
       html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+      saveUiState();
       render();
       break;
     }
@@ -1997,6 +2022,7 @@ document.addEventListener('click', async (event) => {
     case 'select-board': {
       APP.selectedBoardKey = el.dataset.boardKey;
       APP.selectedCardMeldungsNo = null;
+      saveUiState();
       render();
       break;
     }
@@ -2023,12 +2049,14 @@ document.addEventListener('click', async (event) => {
         f[input.dataset.filter] = input.value.trim();
       });
       APP.filters = { search: f.search || '', meldungsNo: f.meldungsNo || '', stammPartNo: f.stammPartNo || '', serialNo: f.serialNo || '', kundenname: f.kundenname || '' };
+      saveUiState();
       render();
       break;
     }
 
     case 'reset-filters': {
       APP.filters = { search: '', meldungsNo: '', stammPartNo: '', serialNo: '', kundenname: '' };
+      saveUiState();
       render();
       break;
     }
@@ -2337,6 +2365,15 @@ document.addEventListener('keydown', (event) => {
 /* ============================================================
    INIT
    ============================================================ */
+
+// Zuletzt gewähltes Board, Filter und Farbschema wiederherstellen
+const savedUi = loadUiState();
+if (savedUi) {
+  if (savedUi.selectedBoardKey) APP.selectedBoardKey = savedUi.selectedBoardKey;
+  if (savedUi.filters) APP.filters = { ...APP.filters, ...savedUi.filters };
+  if (savedUi.theme) document.documentElement.setAttribute('data-theme', savedUi.theme);
+}
+
 render();
 </script>
 </body>
