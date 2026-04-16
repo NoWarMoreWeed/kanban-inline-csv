@@ -565,12 +565,20 @@ function isOverdue(isoStr) {
    ============================================================ */
 const STORAGE_KEY = 'kanban_state';
 const UI_STATE_KEY = 'kanban_ui_state';
+// Erhöhen wenn das State-Schema inkompatibel geändert wird — veralteter State wird dann verworfen
+const SCHEMA_VERSION = 2;
 
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (parsed.schemaVersion !== SCHEMA_VERSION) {
+      console.info(`State-Schema veraltet (v${parsed.schemaVersion ?? '?'} → v${SCHEMA_VERSION}). State wird zurückgesetzt.`);
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+    return parsed;
   } catch (e) {
     console.error('Fehler beim Laden des Zustands:', e);
     return null;
@@ -602,7 +610,7 @@ function loadUiState() {
 
 function saveState() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...STATE, schemaVersion: SCHEMA_VERSION }));
   } catch (e) {
     const isQuota = e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014;
     const msg = isQuota
