@@ -931,9 +931,7 @@ function selectLeadingRow(rows) {
 }
 
 function matchesBoardRule(value, matchType, matchValue) {
-  if (matchType === 'EXACT') return value === matchValue;
-  if (matchType === 'PREFIX') return value.startsWith(matchValue);
-  return value.includes(matchValue);
+  return value === matchValue;
 }
 
 function resolveBoardAssignment(boards, arbeitsplatzVorg) {
@@ -1021,8 +1019,6 @@ function deriveCurrentCard(meldungsNo, rows, boards) {
     columnId: colAssign.column.id,
     columnKey: colAssign.column.key,
     derivationWarning: warnings.length > 0 ? warnings.join(' | ') : null,
-    importRunId: null, // set after
-    manualColumnOverride: false,
   };
 }
 
@@ -1973,7 +1969,6 @@ function handleDrop(event) {
   card.columnKey = colKey;
   card.boardId = targetBoardId;
   card.boardKey = targetBoardKey;
-  card.manualColumnOverride = true;
 
   dragCardId = null;
   saveState();
