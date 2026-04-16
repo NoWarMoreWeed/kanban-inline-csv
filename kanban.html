@@ -380,6 +380,14 @@
       font-size: 12px;
       color: var(--warn-text);
     }
+    .import-result-warn {
+      border-radius: 12px;
+      border: 1px solid var(--clr-warn);
+      background: var(--warn-surface);
+      padding: 12px 16px;
+      font-size: 12px;
+      color: var(--text-strong);
+    }
     .import-result-title { font-weight: 600; }
     .import-result-sub { margin-top: 2px; font-size: 11px; }
 
@@ -597,14 +605,10 @@ function saveState() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
   } catch (e) {
     const isQuota = e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014;
-    if (isQuota) {
-      alert(
-        'Der Import konnte nicht gespeichert werden: Die importierten Daten sind zu groß für den Browser-Speicher.\n\n' +
-        'Bitte importieren Sie eine kleinere Datei (weniger Zeilen).'
-      );
-    } else {
-      alert('Fehler beim Speichern: ' + e.message);
-    }
+    const msg = isQuota
+      ? 'Import konnte nicht gespeichert werden: Browser-Speicher voll. Bitte eine kleinere Datei importieren.'
+      : `Fehler beim Speichern: ${e.message}`;
+    throw new Error(msg);
   }
 }
 
@@ -1038,7 +1042,7 @@ function deriveCurrentCards(normalizedRows, boards) {
 /* ============================================================
    IMPORT LOGIC
    ============================================================ */
-async function runImport(files) {
+async function runImport(files, { skipSizeCheck = false } = {}) {
   if (!files || files.length === 0) throw new Error('Keine Dateien ausgewählt.');
 
   const importRunId = uid();
@@ -1073,12 +1077,9 @@ async function runImport(files) {
     rowOffset += totalRawRows;
   }
 
-  if (allRows.length > 15000) {
-    const ok = confirm(
-      `Warnung: Die Datei enthält ${allRows.length} Zeilen.\n\n` +
-      'Sehr große Importe können den Browser-Speicher überschreiten. Trotzdem fortfahren?'
-    );
-    if (!ok) return null;
+  if (!skipSizeCheck && allRows.length > 15000) {
+    // Bestätigung über das UI anfordern statt Browser-Dialog
+    return { needsConfirm: true, rowCount: allRows.length };
   }
 
   const { cards: newCards, failedCount } = deriveCurrentCards(allRows, STATE.boards);
@@ -1441,12 +1442,21 @@ function renderImportForm() {
           <p class="import-result-sub">${esc(String(importState.result.normalizedRowCount))} Karten importiert — ${esc(importState.result.sourceFileName)}</p>
           ${importState.result.failedCount > 0 ? `<p class="import-result-sub" style="color:var(--clr-warn)">${esc(String(importState.result.failedCount))} Meldung(en) konnten nicht abgeleitet werden und wurden übersprungen.</p>` : ''}
         </div>` : ''}
+      ${importState.status === 'warning' ? `
+        <div class="import-result-warn">
+          <p class="import-result-title">Großer Import — Bestätigung erforderlich</p>
+          <p class="import-result-sub">${esc(importState.message)}</p>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn btn-primary btn-sm" data-action="confirm-import">Trotzdem importieren</button>
+            <button class="btn btn-outline btn-sm" data-action="cancel-import">Abbrechen</button>
+          </div>
+        </div>` : ''}
       ${importState.status === 'error' ? `
         <div class="import-result-err">
           <p class="import-result-title">Import fehlgeschlagen</p>
           <p class="import-result-sub">${esc(importState.message)}</p>
         </div>` : ''}
-      <button class="btn btn-primary" data-action="run-import"${importState.status === 'loading' ? ' disabled' : ''}>
+      <button class="btn btn-primary" data-action="run-import"${importState.status === 'loading' || importState.status === 'warning' ? ' disabled' : ''}>
         ${importState.status === 'loading' ? '<span class="spinner"></span> Importiere…' : 'Import starten'}
       </button>
     </div>`;
@@ -1970,7 +1980,11 @@ function handleDrop(event) {
   card.boardKey = targetBoardKey;
 
   dragCardId = null;
-  saveState();
+  try {
+    saveState();
+  } catch (e) {
+    console.error('Speichern nach Drag & Drop fehlgeschlagen:', e);
+  }
   render();
 }
 
@@ -2066,19 +2080,48 @@ document.addEventListener('click', async (event) => {
       render();
       try {
         const result = await runImport(fileInput.files);
-        if (result === null) {
-          APP.importState = { status: 'idle', message: null, result: null };
+        if (result && result.needsConfirm) {
+          // Zu viele Zeilen — Nutzer um Bestätigung bitten
+          APP.importState = {
+            status: 'warning',
+            message: `Die Datei enthält ${result.rowCount.toLocaleString('de-DE')} Zeilen. Sehr große Importe können den Browser-Speicher überlasten. Trotzdem importieren?`,
+            result: null,
+            pendingFiles: Array.from(fileInput.files),
+          };
           render();
           break;
         }
         APP.importState = { status: 'success', message: null, result };
-        // Reset selected card if not found in new data
+        // Ausgewählte Karte zurücksetzen wenn sie im neuen Import nicht mehr vorhanden
         if (APP.selectedCardMeldungsNo && !STATE.currentCards.find(c => c.meldungsNo === APP.selectedCardMeldungsNo)) {
           APP.selectedCardMeldungsNo = null;
         }
       } catch (e) {
         APP.importState = { status: 'error', message: e.message, result: null };
       }
+      render();
+      break;
+    }
+
+    case 'confirm-import': {
+      const pendingFiles = APP.importState.pendingFiles;
+      APP.importState = { status: 'loading', message: null, result: null };
+      render();
+      try {
+        const result = await runImport(pendingFiles, { skipSizeCheck: true });
+        APP.importState = { status: 'success', message: null, result };
+        if (APP.selectedCardMeldungsNo && !STATE.currentCards.find(c => c.meldungsNo === APP.selectedCardMeldungsNo)) {
+          APP.selectedCardMeldungsNo = null;
+        }
+      } catch (e) {
+        APP.importState = { status: 'error', message: e.message, result: null };
+      }
+      render();
+      break;
+    }
+
+    case 'cancel-import': {
+      APP.importState = { status: 'idle', message: null, result: null };
       render();
       break;
     }
