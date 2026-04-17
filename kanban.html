@@ -465,6 +465,26 @@
     }
     .theme-toggle:hover { color: var(--text-strong); }
 
+    /* === UC BADGE === */
+    .badge-uc {
+      border-color: #7c3aed;
+      background: #ede9fe;
+      color: #5b21b6;
+      font-size: 10px;
+      padding: 1px 7px;
+    }
+    html[data-theme="dark"] .badge-uc {
+      border-color: #8b5cf6;
+      background: #2e1065;
+      color: #c4b5fd;
+    }
+    .uc-toggle {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; color: var(--text-soft); cursor: pointer;
+      user-select: none;
+    }
+    .uc-toggle input { cursor: pointer; accent-color: var(--accent); width: 16px; height: 16px; }
+
     /* === MISC === */
     .flex { display: flex; }
     .flex-col { flex-direction: column; }
@@ -691,10 +711,11 @@ function createInitialState() {
     }],
   });
 
-  return { boards, currentCards: [], lastImport: null, normalizedRows: [] };
+  return { boards, currentCards: [], lastImport: null, normalizedRows: [], ucMap: {} };
 }
 
 let STATE = loadState() || createInitialState();
+if (!STATE.ucMap) STATE.ucMap = {};
 saveState();
 
 /* ============================================================
@@ -742,6 +763,42 @@ function parseCSVContent(content) {
   }
 
   return rows;
+}
+
+/* ============================================================
+   UC CSV IMPORT
+   ============================================================ */
+function parseUcCSV(content) {
+  if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+  const matrix = parseCSVContent(content);
+  if (matrix.length < 2) return {};
+  const headers = matrix[0].map(h => h.trim());
+  const mIdx = headers.indexOf('MELDUNGS_NO');
+  const uIdx = headers.indexOf('UC');
+  if (mIdx === -1 || uIdx === -1) throw new Error('UC-CSV muss Spalten MELDUNGS_NO und UC enthalten.');
+  const map = {};
+  for (const row of matrix.slice(1)) {
+    const meldungsNo = (row[mIdx] ?? '').trim();
+    const uc = (row[uIdx] ?? '').trim();
+    if (meldungsNo && uc) map[meldungsNo] = uc;
+  }
+  return map;
+}
+
+async function runUcImport(file) {
+  if (!file || file.size === 0) throw new Error('Bitte eine UC-CSV-Datei auswählen.');
+  const buffer = await file.arrayBuffer();
+  const uint8 = new Uint8Array(buffer);
+  let content;
+  try {
+    content = new TextDecoder('utf-8', { fatal: true }).decode(uint8);
+  } catch {
+    content = new TextDecoder('windows-1252').decode(uint8);
+  }
+  const map = parseUcCSV(content);
+  STATE.ucMap = map;
+  saveState();
+  return Object.keys(map).length;
 }
 
 /* ============================================================
@@ -1135,6 +1192,7 @@ function getBoardSummaries() {
 
 function applyFilters(cards, filters) {
   return cards.filter(card => {
+    if (filters.hideUC && STATE.ucMap[card.meldungsNo]) return false;
     if (filters.meldungsNo && !card.meldungsNo.includes(filters.meldungsNo)) return false;
     if (filters.stammPartNo && !(card.stammPartNo ?? '').toLowerCase().includes(filters.stammPartNo.toLowerCase())) return false;
     if (filters.serialNo) {
@@ -1287,8 +1345,9 @@ const APP = {
   view: 'board', // 'board' | 'admin'
   selectedBoardKey: null,
   selectedCardMeldungsNo: null,
-  filters: { search: '', meldungsNo: '', stammPartNo: '', serialNo: '', kundenname: '' },
+  filters: { search: '', meldungsNo: '', stammPartNo: '', serialNo: '', kundenname: '', hideUC: false },
   adminSelectedBoardKey: null,
+  ucImportState: { status: 'idle', message: null, count: null },
   adminEditingColumnId: null,
   adminShowCreateForm: false,
   adminRenamingBoard: false,
@@ -1437,36 +1496,69 @@ function renderScreenHeader() {
 }
 
 function renderImportForm() {
-  const { importState } = APP;
+  const { importState, ucImportState } = APP;
+  const ucCount = Object.keys(STATE.ucMap).length;
+  const cardCount = STATE.currentCards.length;
   return `
-    <div class="panel-sm import-form">
+    <div class="panel-sm" style="display:flex;flex-direction:column;gap:0">
       <p class="header-eyebrow">Import</p>
-      <h2 class="font-semibold text-strong" style="margin-top:4px">CSV-Datei laden</h2>
-      <input type="file" id="csv-file-input" accept=".csv,text/csv" multiple>
-      <p class="text-xs text-muted">Mehrere Dateien möglich. Alle Dateien werden zu einem Gesamtabzug zusammengeführt und ersetzen den bisherigen Stand vollständig.</p>
-      ${importState.status === 'success' ? `
-        <div class="import-result-ok">
-          <p class="import-result-title">Import abgeschlossen</p>
-          <p class="import-result-sub">${esc(String(importState.result.normalizedRowCount))} Karten importiert — ${esc(importState.result.sourceFileName)}</p>
-          ${importState.result.failedCount > 0 ? `<p class="import-result-sub" style="color:var(--clr-warn)">${esc(String(importState.result.failedCount))} Meldung(en) konnten nicht abgeleitet werden und wurden übersprungen.</p>` : ''}
-        </div>` : ''}
-      ${importState.status === 'warning' ? `
-        <div class="import-result-warn">
-          <p class="import-result-title">Großer Import — Bestätigung erforderlich</p>
-          <p class="import-result-sub">${esc(importState.message)}</p>
-          <div style="display:flex;gap:8px;margin-top:10px">
-            <button class="btn btn-primary btn-sm" data-action="confirm-import">Trotzdem importieren</button>
-            <button class="btn btn-outline btn-sm" data-action="cancel-import">Abbrechen</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:12px;flex:1">
+
+        <div style="display:flex;flex-direction:column;gap:10px;padding-right:20px">
+          <p class="font-semibold text-strong">Vorgänge</p>
+          <input type="file" id="csv-file-input" accept=".csv,text/csv" multiple>
+          ${importState.status === 'success' ? `
+            <div class="import-result-ok">
+              <p class="import-result-title">Abgeschlossen</p>
+              <p class="import-result-sub">${esc(String(importState.result.normalizedRowCount))} Karten — ${esc(importState.result.sourceFileName)}</p>
+              ${importState.result.failedCount > 0 ? `<p class="import-result-sub" style="color:var(--clr-warn)">${esc(String(importState.result.failedCount))} übersprungen</p>` : ''}
+            </div>` : ''}
+          ${importState.status === 'warning' ? `
+            <div class="import-result-warn">
+              <p class="import-result-title">Bestätigung erforderlich</p>
+              <p class="import-result-sub">${esc(importState.message)}</p>
+              <div style="display:flex;gap:8px;margin-top:10px">
+                <button class="btn btn-primary btn-sm" data-action="confirm-import">Importieren</button>
+                <button class="btn btn-outline btn-sm" data-action="cancel-import">Abbrechen</button>
+              </div>
+            </div>` : ''}
+          ${importState.status === 'error' ? `
+            <div class="import-result-err">
+              <p class="import-result-title">Fehler</p>
+              <p class="import-result-sub">${esc(importState.message)}</p>
+            </div>` : ''}
+          <div style="display:flex;gap:8px;align-items:center;margin-top:auto">
+            <button class="btn btn-primary btn-sm" data-action="run-import"${importState.status === 'loading' || importState.status === 'warning' ? ' disabled' : ''}>
+              ${importState.status === 'loading' ? '<span class="spinner"></span> Importiere…' : 'Import starten'}
+            </button>
+            ${cardCount > 0 ? `<span class="badge">${cardCount} Karten</span>` : ''}
+            ${cardCount > 0 ? `<button class="btn btn-danger btn-sm" data-action="clear-import" style="margin-left:auto">Löschen</button>` : ''}
           </div>
-        </div>` : ''}
-      ${importState.status === 'error' ? `
-        <div class="import-result-err">
-          <p class="import-result-title">Import fehlgeschlagen</p>
-          <p class="import-result-sub">${esc(importState.message)}</p>
-        </div>` : ''}
-      <button class="btn btn-primary" data-action="run-import"${importState.status === 'loading' || importState.status === 'warning' ? ' disabled' : ''}>
-        ${importState.status === 'loading' ? '<span class="spinner"></span> Importiere…' : 'Import starten'}
-      </button>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:10px;padding-left:20px;border-left:1px solid var(--border-soft)">
+          <p class="font-semibold text-strong">UC-Daten</p>
+          <input type="file" id="uc-file-input" accept=".csv,text/csv">
+          ${ucImportState.status === 'success' ? `
+            <div class="import-result-ok">
+              <p class="import-result-title">Abgeschlossen</p>
+              <p class="import-result-sub">${esc(String(ucImportState.count))} Einträge geladen</p>
+            </div>` : ''}
+          ${ucImportState.status === 'error' ? `
+            <div class="import-result-err">
+              <p class="import-result-title">Fehler</p>
+              <p class="import-result-sub">${esc(ucImportState.message)}</p>
+            </div>` : ''}
+          <div style="display:flex;gap:8px;align-items:center;margin-top:auto">
+            <button class="btn btn-primary btn-sm" data-action="run-uc-import"${ucImportState.status === 'loading' ? ' disabled' : ''}>
+              ${ucImportState.status === 'loading' ? '<span class="spinner"></span> Importiere…' : 'UC laden'}
+            </button>
+            ${ucCount > 0 ? `<span class="badge badge-uc">${ucCount} Einträge</span>` : ''}
+            ${ucCount > 0 ? `<button class="btn btn-danger btn-sm" data-action="clear-uc-map" style="margin-left:auto">Löschen</button>` : ''}
+          </div>
+        </div>
+
+      </div>
     </div>`;
 }
 
@@ -1486,7 +1578,8 @@ function renderBoardSelector(summaries, selectedKey) {
 
 function renderFilterBar(boardKey) {
   const f = APP.filters;
-  const hasFilter = f.search || f.meldungsNo || f.stammPartNo || f.serialNo || f.kundenname;
+  const hasFilter = f.search || f.meldungsNo || f.stammPartNo || f.serialNo || f.kundenname || f.hideUC;
+  const ucCount = Object.keys(STATE.ucMap).length;
   return `
     <div class="filter-bar">
       <div class="filter-grid">
@@ -1499,6 +1592,10 @@ function renderFilterBar(boardKey) {
       <div class="filter-actions">
         <button class="btn btn-primary" data-action="apply-filters">Filtern</button>
         ${hasFilter ? `<button class="btn btn-outline" data-action="reset-filters">Filter zurücksetzen</button>` : ''}
+        <label class="uc-toggle" title="${ucCount > 0 ? `UC-Daten geladen: ${ucCount} Einträge` : 'Keine UC-Daten geladen — bitte in der Verwaltung importieren'}">
+          <input type="checkbox" id="filter-hide-uc" ${f.hideUC ? 'checked' : ''} ${ucCount === 0 ? 'disabled' : ''}>
+          UC ausblenden${ucCount > 0 ? ` <span class="badge badge-uc">${ucCount}</span>` : ' <span class="badge" style="opacity:.5">keine Daten</span>'}
+        </label>
       </div>
     </div>`;
 }
@@ -1551,13 +1648,15 @@ function renderKCard(card, boardKey, selectedCard) {
   if (overdue) cls += ' overdue';
 
   const sn = card.stammSerialNo ?? card.serialNo;
+  const ucCode = STATE.ucMap[card.meldungsNo];
 
   return `
     <div class="${cls}" draggable="true" data-card-id="${esc(card.id)}" data-meldungs-no="${esc(card.meldungsNo)}"
          data-action="select-card"
          ondragstart="handleDragStart(event)">
-      <div class="kcard-header">
+      <div class="kcard-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
         <p class="kcard-meldung">${esc(card.meldungsNo)}</p>
+        ${ucCode ? `<span class="badge badge-uc">${esc(ucCode)}</span>` : ''}
       </div>
       <dl class="kcard-body">
         ${card.auftragsNo ? `<dt class="kcard-label">Auftrag</dt><dd class="kcard-value">${esc(card.auftragsNo)}</dd>` : ''}
@@ -1855,6 +1954,7 @@ function renderEditColumnForm(col) {
     </div>`;
 }
 
+
 function renderAdminImportHistory() {
   const run = STATE.lastImport;
   if (!run) return '';
@@ -2038,19 +2138,25 @@ document.addEventListener('click', async (event) => {
     }
 
     case 'apply-filters': {
-      // Collect filter values from DOM
       const f = {};
       document.querySelectorAll('[data-filter]').forEach(input => {
         f[input.dataset.filter] = input.value.trim();
       });
-      APP.filters = { search: f.search || '', meldungsNo: f.meldungsNo || '', stammPartNo: f.stammPartNo || '', serialNo: f.serialNo || '', kundenname: f.kundenname || '' };
+      APP.filters = {
+        search: f.search || '',
+        meldungsNo: f.meldungsNo || '',
+        stammPartNo: f.stammPartNo || '',
+        serialNo: f.serialNo || '',
+        kundenname: f.kundenname || '',
+        hideUC: document.getElementById('filter-hide-uc')?.checked ?? false,
+      };
       saveUiState();
       render();
       break;
     }
 
     case 'reset-filters': {
-      APP.filters = { search: '', meldungsNo: '', stammPartNo: '', serialNo: '', kundenname: '' };
+      APP.filters = { search: '', meldungsNo: '', stammPartNo: '', serialNo: '', kundenname: '', hideUC: false };
       saveUiState();
       render();
       break;
@@ -2109,6 +2215,17 @@ document.addEventListener('click', async (event) => {
 
     case 'cancel-import': {
       APP.importState = { status: 'idle', message: null, result: null };
+      render();
+      break;
+    }
+
+    case 'clear-import': {
+      STATE.currentCards = [];
+      STATE.normalizedRows = [];
+      STATE.lastImport = null;
+      APP.importState = { status: 'idle', message: null, result: null };
+      APP.selectedCardMeldungsNo = null;
+      saveState();
       render();
       break;
     }
@@ -2328,6 +2445,33 @@ document.addEventListener('click', async (event) => {
         }
       }
       saveState();
+      render();
+      break;
+    }
+
+    case 'run-uc-import': {
+      const fileInput = document.getElementById('uc-file-input');
+      if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        APP.ucImportState = { status: 'error', message: 'Bitte eine UC-CSV-Datei auswählen.', count: null };
+        render();
+        return;
+      }
+      APP.ucImportState = { status: 'loading', message: null, count: null };
+      render();
+      try {
+        const count = await runUcImport(fileInput.files[0]);
+        APP.ucImportState = { status: 'success', message: null, count };
+      } catch (e) {
+        APP.ucImportState = { status: 'error', message: e.message, count: null };
+      }
+      render();
+      break;
+    }
+
+    case 'clear-uc-map': {
+      STATE.ucMap = {};
+      saveState();
+      APP.ucImportState = { status: 'idle', message: null, count: null };
       render();
       break;
     }
